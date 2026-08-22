@@ -1,0 +1,10 @@
+# Core dependencies
+numpy>=1.21.0
+pandas>=1.3.0
+matplotlib>=3.4.0
+
+# Add your project-specific dependencies here
+# Example:
+# requests>=2.25.0
+# flask>=2.0.0
+# scikit-learn>=1.0.0
