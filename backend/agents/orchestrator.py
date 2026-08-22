@@ -36,9 +36,7 @@ class NL2SQLOrchestrator:
     
     def __init__(self):
         """Initialize the orchestrator and build the graph."""
-        self.graph = self._build_graph()
-        
-        # Initialize all agents
+        # Initialize all agents first
         self.intent_agent = get_intent_agent()
         self.schema_agent = get_schema_agent()
         self.sql_generation_agent = get_sql_generation_agent()
@@ -46,6 +44,9 @@ class NL2SQLOrchestrator:
         self.optimization_agent = get_optimization_agent()
         self.execution_agent = get_execution_agent()
         self.explanation_agent = get_explanation_agent()
+        
+        # Build the graph after agents are initialized
+        self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
         """
@@ -67,6 +68,7 @@ class NL2SQLOrchestrator:
         workflow.add_node("intent_understanding", self.intent_agent.invoke)
         workflow.add_node("schema_retrieval", self.schema_agent.invoke)
         workflow.add_node("sql_generation", self.sql_generation_agent.invoke)
+        workflow.add_node("sql_generation_retry", lambda state: self.sql_generation_agent.retry_generation(state, state.get("validation_errors", [])))
         workflow.add_node("validation", self.validation_agent.invoke)
         workflow.add_node("optimization", self.optimization_agent.invoke)
         workflow.add_node("execution", self.execution_agent.invoke)
@@ -85,7 +87,7 @@ class NL2SQLOrchestrator:
             source="validation",
             path=self._validate_or_retry,
             path_map={
-                "retry": "sql_generation",
+                "retry": "sql_generation_retry",
                 "proceed": "optimization",
                 "fail": END
             }
@@ -120,9 +122,12 @@ class NL2SQLOrchestrator:
         retry_count = state.get("retry_count", 0)
         max_retries = state.get("max_retries", 3)
         workflow_status = state.get("workflow_status", "running")
+        validation_errors = state.get("validation_errors", [])
         
         # Check if we should retry
         if not is_valid and retry_count < max_retries and workflow_status == "running":
+            # Store validation errors for retry node to use
+            state["validation_errors"] = validation_errors
             return "retry"
         
         # Check if we can proceed

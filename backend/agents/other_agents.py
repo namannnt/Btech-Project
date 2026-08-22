@@ -11,6 +11,7 @@ import json
 import time
 from typing import Dict, Any, List, Optional
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from backend.core.config import settings
 from backend.agents.state import AgentState, add_to_processing_log
 
