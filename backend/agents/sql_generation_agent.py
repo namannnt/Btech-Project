@@ -232,7 +232,12 @@ class SQLGenerationAgent:
         """
         state["current_agent"] = "sql_generation_retry"
         
+        # Update retry count FIRST - before any LLM call
+        # This ensures retry_count is always incremented even if LLM is not available or fails
+        state["retry_count"] = state.get("retry_count", 0) + 1
+        
         if not self.llm:
+            add_to_processing_log(state, "No LLM configured for retry")
             return state
         
         # Enhanced prompt for retry with error feedback
@@ -259,9 +264,6 @@ Return in the same JSON format as before."""
                 "question": state["question"],
                 "table_schemas": self._format_schema_context(state)
             })
-            
-            # Update retry count
-            state["retry_count"] = state.get("retry_count", 0) + 1
             
             # Update candidates
             candidates = result.get("candidates", [])
