@@ -64,7 +64,7 @@ if prompt := st.chat_input("Ask anything about your database..."):
         
         try:
             response = requests.post(
-                f"{api_url}/api/query",
+                f"{api_url}/api/v1/query",
                 json={"question": prompt},
                 timeout=60
             )
@@ -72,11 +72,13 @@ if prompt := st.chat_input("Ask anything about your database..."):
             if response.status_code == 200:
                 data = response.json()
                 
-                # Extract fields
-                answer = data.get("answer", "No answer generated.")
-                sql_query = data.get("sql", "")
-                explanation = data.get("explanation", "")
-                results = data.get("results", [])
+                # Extract fields - matching backend NLQueryResponse schema
+                explanation_obj = data.get("explanation") or {}
+                sql_query = data.get("generated_sql", "")
+                exec_result = data.get("execution_result") or {}
+                results = exec_result.get("rows", [])
+                explanation = explanation_obj.get("sql_explanation", "")
+                answer = explanation_obj.get("result_summary", "No answer generated.")
                 
                 # Display Response
                 message_placeholder.markdown(f"**Answer:** {answer}")
