@@ -1,51 +1,6 @@
 ```
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
+# Environment
 .env
 .env.local
 .env.*
-.python-version
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Dependencies
-node_modules/
-
-# Build artifacts
-dist/
-build/
-*.egg-info/
-
-# Logs
-*.log
-
-# Testing
-.coverage
-coverage/
-htmlcov/
-.nyc_output/
-coverage-final.json
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Backup files
-*.bak
-*.backup
-*.old
 ```

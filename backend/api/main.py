@@ -68,7 +68,10 @@ def convert_state_to_response(state: Dict[str, Any]) -> NLQueryResponse:
         ) if state.get("relevant_tables") else None,
         generated_sql=state.get("optimized_sql") or state.get("selected_sql"),
         optimized_sql=state.get("optimized_sql"),
-        validation=ValidationResult(**state["validation_result"]) if state.get("validation_result") else None,
+        validation=ValidationResult(
+            **state["validation_result"], 
+            is_valid=state.get("is_valid", False)
+        ) if state.get("validation_result") else None,
         execution_result=QueryExecutionResult(
             success=state.get("execution_success", False),
             columns=state.get("result_columns", []),
