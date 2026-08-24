@@ -159,6 +159,9 @@ class SchemaRetrievalAgent:
             print("ChromaDB collection not available")
             return
         
+        # Cache the schema for later retrieval (avoids re-introspection)
+        self._cached_schema = schema_info
+        
         documents = []
         metadatas = []
         ids = []
@@ -262,9 +265,11 @@ class SchemaRetrievalAgent:
                 relevant_tables.append(table_name)
                 relevance_scores[table_name] = float(similarity)
         
-        # Get full schema for relevant tables
-        if self.db_engine:
-            full_schema = self.introspect_schema()
+        # Get full schema for relevant tables from already-indexed data
+        # NOTE: Schema was introspected at startup, no need to re-introspect
+        # We retrieve from the stored schema cache instead
+        if self.db_engine and hasattr(self, '_cached_schema'):
+            full_schema = self._cached_schema
             for table_name in relevant_tables[:top_k]:
                 if table_name in full_schema["tables"]:
                     table_schemas[table_name] = full_schema["tables"][table_name]

@@ -131,6 +131,8 @@ class SQLValidationAgent:
         errors = []
         
         try:
+            from sqlglot import exp
+            
             # Parse SQL to extract referenced tables and columns
             parsed = parse(sql)
             if not parsed:
@@ -138,24 +140,23 @@ class SQLValidationAgent:
             
             statement = parsed[0]
             
-            # Extract all table references
+            # Extract all table references using sqlglot's built-in walker
             referenced_tables = set()
             referenced_columns = {}
             
-            # Walk through the AST to find table and column references
-            for node in statement.walk():
-                # Check for table expressions
-                if hasattr(node, 'this') and hasattr(node.this, 'this'):
-                    if hasattr(node.this.this, 'this'):
-                        table_name = node.this.this.this
-                        if isinstance(table_name, str):
-                            referenced_tables.add(table_name.lower())
-                
-                # Check for column references
-                if hasattr(node, 'this') and hasattr(node, 'alias'):
-                    col_name = getattr(node.this, 'this', None)
-                    if col_name and isinstance(col_name, str):
-                        referenced_columns[col_name.lower()] = True
+            # Use find_all(exp.Table) to get all table references
+            for table_node in statement.find_all(exp.Table):
+                table_name = table_node.name
+                if table_name:
+                    referenced_tables.add(table_name.lower())
+            
+            # Use find_all(exp.Column) to get all column references
+            for col_node in statement.find_all(exp.Column):
+                col_name = col_node.name
+                if col_name:
+                    referenced_columns[col_name.lower()] = {
+                        'table': col_node.table if hasattr(col_node, 'table') else None
+                    }
             
             # Validate tables exist
             available_tables = set(t.lower() for t in table_schemas.keys())
@@ -190,6 +191,8 @@ class SQLValidationAgent:
         Returns:
             Tuple of (is_valid, list_of_errors)
         """
+        from sqlglot import exp
+        
         errors = []
         
         # Get permissions for this role
@@ -218,14 +221,30 @@ class SQLValidationAgent:
                     f"Operation(s) not permitted for role '{user_role}': {disallowed_ops}"
                 )
             
-            # Check table permissions
+            # Check table permissions - IMPLEMENTED
             allowed_tables = permissions.get("allowed_tables", "*")
             if allowed_tables != "*":
-                # Extract referenced tables (simplified)
+                # Extract referenced tables using sqlglot's find_all
                 parsed = parse(sql)
                 if parsed:
+                    statement = parsed[0]
+                    referenced_tables = set()
+                    
+                    # Use find_all(exp.Table) to get all table references
+                    for table_node in statement.find_all(exp.Table):
+                        table_name = table_node.name
+                        if table_name:
+                            referenced_tables.add(table_name.lower())
+                    
+                    # Convert allowed_tables to lowercase set for comparison
+                    allowed_tables_set = set(t.lower() for t in allowed_tables)
+                    
                     # Check each referenced table against allowed list
-                    pass  # Full implementation would extract and check tables
+                    unauthorized_tables = referenced_tables - allowed_tables_set
+                    if unauthorized_tables:
+                        errors.append(
+                            f"Table(s) not accessible for role '{user_role}': {unauthorized_tables}"
+                        )
             
             return len(errors) == 0, errors
             

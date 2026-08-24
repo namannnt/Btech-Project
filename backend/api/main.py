@@ -289,6 +289,49 @@ async def get_schema_info(database_id: str):
 
 
 # ============================================================================
+# Startup Event - Initialize Schema at Application Startup
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Initialize the application on startup.
+    
+    This runs once when the FastAPI app starts:
+    1. Connect to database
+    2. Introspect schema
+    3. Index schema into ChromaDB
+    
+    This ensures schema is available for the first query without re-introspection.
+    """
+    from backend.agents.schema_agent import get_schema_agent
+    
+    print("Starting schema initialization...")
+    
+    try:
+        agent = get_schema_agent()
+        db_url = settings.database_url
+        
+        if agent.connect_to_database(db_url):
+            print("✓ Connected to database for schema introspection")
+            
+            # Introspect schema
+            schema = agent.introspect_schema()
+            table_count = len(schema.get('tables', {}))
+            print(f"✓ Introspected {table_count} tables")
+            
+            # Index schema into ChromaDB
+            agent.index_schema(schema)
+            print(f"✓ Schema indexed into ChromaDB")
+        else:
+            print("⚠ Could not connect to database - schema indexing skipped")
+            
+    except Exception as e:
+        print(f"⚠ Schema initialization failed: {e}")
+        print("Schema will be indexed on first query instead")
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 

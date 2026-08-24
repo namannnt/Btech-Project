@@ -207,7 +207,7 @@ class SQLExecutionAgent:
     
     def connect_to_database(self, db_url: Optional[str] = None) -> bool:
         """
-        Connect to the database.
+        Connect to the database with proper timeout settings.
         
         Args:
             db_url: Database connection URL
@@ -221,16 +221,31 @@ class SQLExecutionAgent:
             db_url = settings.database_url
         
         try:
-            # Create engine with safety settings
-            self.db_engine = create_engine(
-                db_url,
-                pool_pre_ping=True,  # Validate connections before use
-                pool_recycle=3600,   # Recycle connections after 1 hour
-                execution_options={
-                    "statement_timeout": settings.max_query_timeout * 1000,  # ms
-                    "max_rows": settings.max_rows_returned
-                }
-            )
+            # Determine database dialect for driver-specific timeout settings
+            if "postgresql" in db_url:
+                # PostgreSQL: use statement_timeout via options
+                self.db_engine = create_engine(
+                    db_url,
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
+                    connect_args={"options": f"-c statement_timeout={settings.max_query_timeout * 1000}"}
+                )
+            elif "mysql" in db_url:
+                # MySQL: use read_timeout via connect_args
+                self.db_engine = create_engine(
+                    db_url,
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
+                    connect_args={"read_timeout": settings.max_query_timeout}
+                )
+            else:
+                # SQLite: no native timeout, will use Python-level timeout
+                self.db_engine = create_engine(
+                    db_url,
+                    pool_pre_ping=True,
+                    pool_recycle=3600
+                )
+            
             return True
         except Exception as e:
             print(f"Database connection failed: {e}")
@@ -240,6 +255,11 @@ class SQLExecutionAgent:
         """
         Execute SQL query with safety limits.
         
+        Implements:
+        - Row limiting via Python slicing (enforced regardless of driver support)
+        - Timeout via threading for SQLite (PostgreSQL/MySQL use driver-level timeout)
+        - Public SQLAlchemy API for column names (.keys() instead of .cursor.description)
+        
         Args:
             sql: SQL query to execute
             
@@ -247,6 +267,7 @@ class SQLExecutionAgent:
             Dictionary with results, columns, row count, execution time, errors
         """
         from sqlalchemy import text
+        import threading
         
         result = {
             "success": False,
@@ -266,16 +287,48 @@ class SQLExecutionAgent:
             start_time = time.time()
             
             with self.db_engine.connect() as conn:
-                # Execute query
-                db_result = conn.execute(text(sql))
+                # For SQLite, implement timeout via threading
+                if "sqlite" in str(self.db_engine.url):
+                    exec_result = {"data": None, "error": None}
+                    
+                    def run_query():
+                        try:
+                            db_result = conn.execute(text(sql))
+                            exec_result["data"] = db_result
+                        except Exception as e:
+                            exec_result["error"] = e
+                    
+                    thread = threading.Thread(target=run_query)
+                    thread.daemon = True
+                    thread.start()
+                    thread.join(timeout=settings.max_query_timeout)
+                    
+                    if thread.is_alive():
+                        # Query timed out
+                        result["error_message"] = f"Query exceeded timeout of {settings.max_query_timeout}s"
+                        return result
+                    
+                    if exec_result["error"]:
+                        raise exec_result["error"]
+                    
+                    db_result = exec_result["data"]
+                else:
+                    # PostgreSQL/MySQL: driver handles timeout
+                    db_result = conn.execute(text(sql))
                 
-                # Get column names
-                result["columns"] = [col.name for col in db_result.cursor.description]
+                # Get column names using public API (not .cursor.description)
+                result["columns"] = list(db_result.keys())
                 
-                # Fetch rows with limit
-                rows = db_result.fetchmany(settings.max_rows_returned)
-                result["rows"] = [list(row) for row in rows]
+                # Fetch rows and enforce row limit in Python
+                all_rows = db_result.fetchall()
+                limited_rows = all_rows[:settings.max_rows_returned]
+                
+                result["rows"] = [list(row) for row in limited_rows]
                 result["row_count"] = len(result["rows"])
+                
+                # Check if we hit the row limit
+                if len(all_rows) > settings.max_rows_returned:
+                    result["warning"] = f"Results truncated at {settings.max_rows_returned} rows"
                 
                 # Calculate execution time
                 end_time = time.time()
