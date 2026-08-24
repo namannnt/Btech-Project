@@ -71,7 +71,10 @@ def convert_state_to_response(state: Dict[str, Any]) -> NLQueryResponse:
         validation=ValidationResult(
             **state["validation_result"], 
             is_valid=state.get("is_valid", False)
-        ) if state.get("validation_result") else None,
+        ) if state.get("validation_result") else ValidationResult(
+            is_valid=state.get("is_valid", False),
+            error_message=state.get("validation_error")
+        ),
         execution_result=QueryExecutionResult(
             success=state.get("execution_success", False),
             columns=state.get("result_columns", []),
