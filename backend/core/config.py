@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     
     # LLM Model Configuration
     primary_llm_model: str = "gpt-4o-mini"
-    fallback_llm_model: str = "llama-3.1-70b-versatile"
+    fallback_llm_model: str = "openai/gpt-oss-120b"  # Current Groq model for accuracy-critical tasks
+    explanation_llm_model: str = "openai/gpt-oss-20b"  # Current Groq model for cost-saving tasks
     
     # Query Execution Limits
     max_query_timeout: int = 30

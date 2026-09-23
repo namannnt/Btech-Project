@@ -88,19 +88,21 @@ class SQLGenerationAgent:
             SQL_GENERATION_PROMPT
         )
         
-        # Use OpenAI gpt-4o-mini for SQL generation (accuracy-critical)
-        if settings.use_openai:
-            from langchain_openai import ChatOpenAI
-            self.llm = ChatOpenAI(
-                model=settings.primary_llm_model,
+        # Use Groq first to avoid OpenAI quota issues, fallback to OpenAI
+        if settings.use_groq:
+            from langchain_groq import ChatGroq
+            self.llm = ChatGroq(
+                api_key=settings.groq_api_key,  # Explicitly pass API key
+                model=settings.fallback_llm_model,
                 temperature=0.2,  # Slightly higher for diversity in candidates
                 max_tokens=2000
             )
-        elif settings.use_groq:
-            from langchain_groq import ChatGroq
-            self.llm = ChatGroq(
-                model=settings.fallback_llm_model,
-                temperature=0.2,
+        elif settings.use_openai:
+            from langchain_openai import ChatOpenAI
+            self.llm = ChatOpenAI(
+                api_key=settings.openai_api_key,  # Explicitly pass API key
+                model=settings.primary_llm_model,
+                temperature=0.2,  # Slightly higher for diversity in candidates
                 max_tokens=2000
             )
         else:

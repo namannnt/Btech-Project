@@ -70,6 +70,7 @@ class QueryOptimizationAgent:
         if settings.use_openai:
             from langchain_openai import ChatOpenAI
             self.llm = ChatOpenAI(
+                api_key=settings.openai_api_key,  # Explicitly pass API key
                 model=settings.primary_llm_model,
                 temperature=0.1,
                 max_tokens=1500
@@ -77,6 +78,7 @@ class QueryOptimizationAgent:
         elif settings.use_groq:
             from langchain_groq import ChatGroq
             self.llm = ChatGroq(
+                api_key=settings.groq_api_key,  # Explicitly pass API key
                 model=settings.fallback_llm_model,
                 temperature=0.1,
                 max_tokens=1500
@@ -435,13 +437,15 @@ class ExplanationAgent:
         if settings.use_groq:
             from langchain_groq import ChatGroq
             self.llm = ChatGroq(
-                model=settings.fallback_llm_model,
+                api_key=settings.groq_api_key,  # Explicitly pass API key
+                model=settings.explanation_llm_model,  # Use lighter model for explanations
                 temperature=0.3,  # Slightly higher for more natural explanations
                 max_tokens=1000
             )
         elif settings.use_openai:
             from langchain_openai import ChatOpenAI
             self.llm = ChatOpenAI(
+                api_key=settings.openai_api_key,  # Explicitly pass API key
                 model=settings.primary_llm_model,
                 temperature=0.3,
                 max_tokens=1000

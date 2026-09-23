@@ -73,6 +73,7 @@ class IntentUnderstandingAgent:
         if settings.use_groq:
             from langchain_groq import ChatGroq
             self.llm = ChatGroq(
+                api_key=settings.groq_api_key,  # Explicitly pass API key
                 model=settings.fallback_llm_model,
                 temperature=0.1,  # Low temperature for consistent parsing
                 max_tokens=1000
@@ -80,6 +81,7 @@ class IntentUnderstandingAgent:
         elif settings.use_openai:
             from langchain_openai import ChatOpenAI
             self.llm = ChatOpenAI(
+                api_key=settings.openai_api_key,  # Explicitly pass API key
                 model=settings.primary_llm_model,
                 temperature=0.1,
                 max_tokens=1000

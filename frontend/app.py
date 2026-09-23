@@ -27,7 +27,7 @@ with st.sidebar:
     st.title("⚙️ Settings")
     api_url = st.text_input("Backend API URL", value="http://localhost:8000")
     st.divider()
-    st.info("💡 **Tips:**\n- Ask questions like 'Show me all employees in IT'\n- Try 'What is the average salary?'\n- System auto-validates SQL before running")
+    st.info("💡 **Tips:**\n- Ask questions like 'Show me all artists'\n- Try 'List all customers'\n- System auto-validates SQL before running")
 
 # Main Title
 st.title("🤖 NL2SQL Multi-Agent System")

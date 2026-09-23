@@ -1,6 +1,24 @@
-```
 # Environment
 .env
 .env.local
 .env.*
-```
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Database files
+*.db
+*.sqlite3
