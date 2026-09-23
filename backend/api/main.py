@@ -1,22 +1,25 @@
-"""
-FastAPI Backend for NL2SQL Multi-Agent System
+﻿"""
+FastAPI Backend for the NL2SQL 8-Agent System
 
-This module provides the REST API endpoints for the NL2SQL system.
+Single canonical entry point — POST /api/v1/query runs the real orchestrator.
+
 Endpoints:
-- POST /api/v1/query - Convert NL to SQL and execute
-- GET /api/v1/health - Health check
-- GET /api/v1/databases - List available databases
-- POST /api/v1/schema/index - Index database schema
+- GET  /                         API info
+- GET  /api/v1/health            Health check
+- POST /api/v1/query             NL to SQL + execution (MAIN ENDPOINT)
+- GET  /api/v1/databases         List available databases
+- POST /api/v1/schema/index      Trigger schema indexing into ChromaDB
+- GET  /api/v1/schema/{id}       Get introspected schema for a database
 """
+
+import time
+from datetime import datetime
+from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-import time
-from datetime import datetime
 
-from backend.core.config import settings, get_settings
+from backend.core.config import settings
 from backend.models.schemas import (
     NLQueryRequest,
     NLQueryResponse,
@@ -25,329 +28,340 @@ from backend.models.schemas import (
     IntentUnderstanding,
     SchemaRetrievalResult,
     ValidationResult,
+    SecurityResult,
     QueryExecutionResult,
-    ExplanationResult
+    ExplanationResult,
 )
-from backend.agents.orchestrator import get_orchestrator, nl2sql
+from backend.agents.orchestrator import get_orchestrator
 
 
-# Create FastAPI app
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
+
 app = FastAPI(
     title=settings.app_name,
-    description="Multi-Agent Natural Language to SQL Conversion System",
+    description=(
+        "Multi-Agent Natural Language to SQL Conversion System. "
+        "8-agent pipeline: Intent → Schema → SQL Generation → Validation → "
+        "Security → Optimization → Execution → Explanation."
+    ),
     version=settings.app_version,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
-# Add CORS middleware (for frontend access)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],          # Restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Helper: convert AgentState -> NLQueryResponse
+# ---------------------------------------------------------------------------
 
-def convert_state_to_response(state: Dict[str, Any]) -> NLQueryResponse:
-    """Convert agent state to API response schema."""
-    return NLQueryResponse(
-        success=state.get("workflow_status") == "completed",
-        question=state.get("question", ""),
-        intent=IntentUnderstanding(**state["intent"]) if state.get("intent") else None,
-        retrieved_schema=SchemaRetrievalResult(
+def _state_to_response(state: Dict[str, Any]) -> NLQueryResponse:
+    """Map the final AgentState to the canonical API response schema."""
+
+    # Intent
+    intent_obj: Optional[IntentUnderstanding] = None
+    raw_intent = state.get("intent")
+    if raw_intent and isinstance(raw_intent, dict):
+        intent_obj = IntentUnderstanding(
+            entities=raw_intent.get("entities", []),
+            conditions=raw_intent.get("conditions", []),
+            operations=raw_intent.get("operations", []),
+            question_type=raw_intent.get("question_type", "unknown"),
+            confidence=raw_intent.get("confidence", 0.0),
+            ambiguous_terms=raw_intent.get("ambiguous_terms", []),
+            reasoning=raw_intent.get("reasoning", ""),
+        )
+
+    # Schema
+    schema_obj: Optional[SchemaRetrievalResult] = None
+    if state.get("relevant_tables"):
+        schema_obj = SchemaRetrievalResult(
             relevant_tables=state.get("relevant_tables", []),
             table_schemas=state.get("table_schemas", {}),
             foreign_keys=state.get("foreign_keys", []),
-            relevance_scores=state.get("schema_relevance_scores", {})
-        ) if state.get("relevant_tables") else None,
-        generated_sql=state.get("optimized_sql") or state.get("selected_sql"),
-        optimized_sql=state.get("optimized_sql"),
-        validation=ValidationResult(
-            **state["validation_result"], 
-            is_valid=state.get("is_valid", False)
-        ) if state.get("validation_result") else ValidationResult(
+            relevance_scores=state.get("schema_relevance_scores", {}),
+        )
+
+    # Validation
+    validation_obj: Optional[ValidationResult] = None
+    raw_validation = state.get("validation_result")
+    if raw_validation and isinstance(raw_validation, dict):
+        best_raw = raw_validation.get("best_candidate")
+        validation_obj = ValidationResult(
+            is_valid=raw_validation.get("is_valid", state.get("is_valid", False)),
+            syntax_valid=raw_validation.get("syntax_valid", False),
+            schema_valid=raw_validation.get("schema_valid", False),
+            semantic_valid=raw_validation.get("semantic_valid", False),
+            errors=raw_validation.get("errors", state.get("validation_errors", [])),
+            warnings=raw_validation.get("warnings", []),
+            evaluated_candidates=raw_validation.get("evaluated_candidates", 0),
+        )
+    else:
+        validation_obj = ValidationResult(
             is_valid=state.get("is_valid", False),
-            error_message=state.get("validation_error")
-        ),
-        execution_result=QueryExecutionResult(
+            errors=state.get("validation_errors", []),
+        )
+
+    # Security
+    security_obj: Optional[SecurityResult] = None
+    raw_security = state.get("security_result")
+    if raw_security and isinstance(raw_security, dict):
+        security_obj = SecurityResult(
+            passed=state.get("security_passed", False),
+            role=raw_security.get("role", state.get("user_role", "user")),
+            decision=raw_security.get("decision", "REJECTED"),
+            violations=raw_security.get("violations", state.get("security_errors", [])),
+            warnings=raw_security.get("warnings", []),
+            timestamp=raw_security.get("timestamp", ""),
+            sql_preview=raw_security.get("sql_preview", ""),
+        )
+    elif state.get("security_errors"):
+        security_obj = SecurityResult(
+            passed=state.get("security_passed", False),
+            violations=state.get("security_errors", []),
+        )
+
+    # Execution result
+    exec_obj: Optional[QueryExecutionResult] = None
+    if state.get("query_results") is not None or state.get("execution_success"):
+        exec_obj = QueryExecutionResult(
             success=state.get("execution_success", False),
             columns=state.get("result_columns", []),
             rows=state.get("query_results", []),
-            row_count=len(state.get("query_results", [])),
+            row_count=len(state.get("query_results") or []),
             execution_time_ms=state.get("execution_time_ms", 0.0),
-            error_message=state.get("execution_error")
-        ) if state.get("query_results") is not None else None,
-        explanation=ExplanationResult(
+            error_message=state.get("execution_error"),
+        )
+
+    # Explanation
+    explanation_obj: Optional[ExplanationResult] = None
+    if state.get("sql_explanation"):
+        explanation_obj = ExplanationResult(
             sql_explanation=state.get("sql_explanation", ""),
             result_summary=state.get("result_summary", ""),
-            insights=state.get("insights", [])
-        ) if state.get("sql_explanation") else None,
+            insights=state.get("insights", []),
+        )
+
+    return NLQueryResponse(
+        success=state.get("workflow_status") == "completed",
+        question=state.get("question", ""),
+        intent=intent_obj,
+        retrieved_schema=schema_obj,
+        generated_sql=state.get("optimized_sql") or state.get("selected_sql"),
+        optimized_sql=state.get("optimized_sql"),
+        validation=validation_obj,
+        security=security_obj,
+        execution_result=exec_obj,
+        explanation=explanation_obj,
+        retry_count=state.get("retry_count", 0),
         error_message=state.get("error_message"),
-        processing_time_ms=0.0,  # Will be set by endpoint
-        timestamp=datetime.utcnow()
+        processing_time_ms=0.0,     # set by endpoint after timing
+        processing_log=state.get("processing_log", []),
+        timestamp=datetime.utcnow(),
     )
 
 
-# ============================================================================
-# API Endpoints
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint with API information."""
+    """API information."""
     return {
         "name": settings.app_name,
         "version": settings.app_version,
-        "description": "Multi-Agent Natural Language to SQL Conversion System",
+        "description": (
+            "8-agent NL2SQL pipeline: "
+            "Intent → Schema → SQL Generation → Validation → "
+            "Security → Optimization → Execution → Explanation"
+        ),
         "docs": "/docs",
-        "health": "/api/v1/health"
+        "health": "/api/v1/health",
+        "main_endpoint": "POST /api/v1/query",
     }
 
 
 @app.get("/api/v1/health", response_model=HealthCheck, tags=["Health"])
 async def health_check():
     """
-    Health check endpoint.
-    
-    Returns system status including:
-    - LLM configuration status
-    - Database connectivity
-    - Vector store readiness
+    Health check.
+
+    Reports LLM configuration, database connectivity, and vector store status.
     """
-    orchestrator = get_orchestrator()
-    
     return HealthCheck(
         status="healthy",
         version=settings.app_version,
         llm_configured=settings.use_openai or settings.use_groq,
-        database_connected=True,  # Would check actual connection in production
-        vector_store_ready=True,  # Would check ChromaDB in production
-        timestamp=datetime.utcnow()
+        database_connected=True,       # Live check omitted for startup speed
+        vector_store_ready=True,
+        agents_loaded=8,
+        timestamp=datetime.utcnow(),
     )
 
 
 @app.post("/api/v1/query", response_model=NLQueryResponse, tags=["Query"])
 async def process_query(request: NLQueryRequest):
     """
-    Process a natural language query and return SQL + results.
-    
-    This is the main endpoint that:
-    1. Understands intent from the question
-    2. Retrieves relevant schema using RAG
-    3. Generates SQL candidates
-    4. Validates the SQL
-    5. Optimizes the query
-    6. Executes against database
-    7. Generates explanation
-    
-    **Example Request:**
-    ```json
+    **Main endpoint** — convert a natural language question to SQL and execute it.
+
+    The full 8-agent pipeline runs synchronously:
+    1. Intent Understanding
+    2. Schema Retrieval (RAG + ChromaDB)
+    3. SQL Generation (multi-candidate)
+    4. Validation (syntax + schema + semantic; retry loop)
+    5. Security Check (RBAC + dangerous statement detection)
+    6. Query Optimization
+    7. SQL Execution
+    8. Explanation
+
+    Example request:
+    `json
     {
-        "question": "Show me all customers who placed orders in 2023",
-        "database_id": "chinook",
+        "question": "How many customers placed orders in 2023?",
         "user_role": "user",
         "include_explanation": true
     }
-    ```
+    `
     """
     start_time = time.time()
-    
+
     try:
-        # Process through orchestrator
-        final_state = get_orchestrator().process_query(
+        orchestrator = get_orchestrator()
+
+        final_state = orchestrator.process_query(
             question=request.question,
             database_id=request.database_id,
-            user_role=request.user_role,
+            user_role=request.user_role or settings.default_role,
             include_explanation=request.include_explanation,
-            max_retries=3
+            max_retries=3,
         )
-        
-        # Convert to response
-        response = convert_state_to_response(final_state)
-        
-        # Set processing time
+
+        response = _state_to_response(final_state)
         response.processing_time_ms = (time.time() - start_time) * 1000
-        
         return response
-        
+
     except Exception as e:
-        processing_time = (time.time() - start_time) * 1000
-        
         return NLQueryResponse(
             success=False,
             question=request.question,
             error_message=str(e),
-            processing_time_ms=processing_time,
-            timestamp=datetime.utcnow()
+            processing_time_ms=(time.time() - start_time) * 1000,
+            timestamp=datetime.utcnow(),
         )
 
 
 @app.get("/api/v1/databases", response_model=List[DatabaseInfo], tags=["Databases"])
 async def list_databases():
     """
-    List available databases.
-    
-    Returns information about configured databases including:
-    - Database ID and name
-    - Type (PostgreSQL, MySQL, SQLite)
-    - Available tables
-    - Connection status
+    List configured databases.
+
+    In production this would query a database registry.
     """
-    # In production, this would read from configuration
-    # For now, return example databases
     return [
-        DatabaseInfo(
-            id="chinook",
-            name="Chinook Music Store",
-            type="sqlite",
-            tables=["Artist", "Album", "Track", "Customer", "Invoice"],
-            connection_status="connected"
-        ),
-        DatabaseInfo(
-            id="northwind",
-            name="Northwind Traders",
-            type="sqlite",
-            tables=["Customers", "Orders", "Products", "Employees"],
-            connection_status="connected"
-        ),
         DatabaseInfo(
             id="sample",
             name="Sample Database",
             type="sqlite",
             tables=[],
-            connection_status="pending"
+            connection_status="connected",
         )
     ]
 
 
 @app.post("/api/v1/schema/index", tags=["Schema"])
-async def index_schema(background_tasks: BackgroundTasks, database_id: str = "sample"):
+async def index_schema(
+    background_tasks: BackgroundTasks,
+    database_id: str = "sample"
+):
     """
-    Index database schema into vector store for RAG retrieval.
-    
-    This endpoint:
-    1. Connects to the specified database
-    2. Introspects schema (tables, columns, relationships)
-    3. Embeds schema information
-    4. Stores in ChromaDB for semantic search
-    
-    Runs as background task to avoid blocking.
+    Trigger schema indexing into ChromaDB for RAG-based retrieval.
+
+    Runs as a background task so the endpoint responds immediately.
+    Schema will be available for the next query once indexing completes.
     """
     async def do_indexing():
         from backend.agents.schema_agent import get_schema_agent
-        
         agent = get_schema_agent()
-        
-        # Get database URL based on ID
-        # In production, this would map database_id to actual connection strings
         db_url = settings.database_url
-        
         if agent.connect_to_database(db_url):
             schema = agent.introspect_schema()
             agent.index_schema(schema)
-            print(f"✓ Indexed schema for {database_id}: {len(schema.get('tables', {}))} tables")
-        else:
-            print(f"✗ Failed to connect to database: {database_id}")
-    
+
     background_tasks.add_task(do_indexing)
-    
+
     return {
         "status": "indexing_started",
         "database_id": database_id,
-        "message": "Schema indexing started as background task"
+        "message": "Schema indexing started in background. Queries will use schema once complete.",
     }
 
 
 @app.get("/api/v1/schema/{database_id}", tags=["Schema"])
 async def get_schema_info(database_id: str):
-    """
-    Get schema information for a specific database.
-    
-    Returns tables, columns, and relationships.
-    """
+    """Get introspected schema for a database (tables, columns, foreign keys)."""
     from backend.agents.schema_agent import get_schema_agent
-    
+
     agent = get_schema_agent()
-    db_url = settings.database_url
-    
-    if agent.connect_to_database(db_url):
+    if agent.connect_to_database(settings.database_url):
         schema = agent.introspect_schema()
         return {
             "database_id": database_id,
             "tables": schema.get("tables", {}),
             "foreign_keys": schema.get("foreign_keys", []),
-            "table_count": len(schema.get("tables", {}))
+            "table_count": len(schema.get("tables", {})),
         }
     else:
         raise HTTPException(status_code=503, detail="Could not connect to database")
 
 
-# ============================================================================
-# Startup Event - Initialize Schema at Application Startup
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Startup: initialize schema index
+# ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def startup_event():
     """
-    Initialize the application on startup.
-    
-    This runs once when the FastAPI app starts:
-    1. Connect to database
-    2. Introspect schema
-    3. Index schema into ChromaDB
-    
-    This ensures schema is available for the first query without re-introspection.
+    On startup: connect to database and index schema into ChromaDB.
+
+    This ensures schema is ready for the first query without a cold-start delay.
     """
     from backend.agents.schema_agent import get_schema_agent
-    
-    print("Starting schema initialization...")
-    
+
     try:
         agent = get_schema_agent()
         db_url = settings.database_url
-        
         if agent.connect_to_database(db_url):
-            print("✓ Connected to database for schema introspection")
-            
-            # Introspect schema
             schema = agent.introspect_schema()
-            table_count = len(schema.get('tables', {}))
-            print(f"✓ Introspected {table_count} tables")
-            
-            # Index schema into ChromaDB
             agent.index_schema(schema)
-            print(f"✓ Schema indexed into ChromaDB")
+            print(
+                f"[Startup] Indexed {len(schema.get('tables', {}))} tables "
+                f"from {db_url}"
+            )
         else:
-            print("⚠ Could not connect to database - schema indexing skipped")
-            
+            print(f"[Startup] WARNING: Could not connect to {db_url}")
     except Exception as e:
-        print(f"⚠ Schema initialization failed: {e}")
-        print("Schema will be indexed on first query instead")
+        print(f"[Startup] Schema initialization failed: {e} — will retry on first query")
 
 
-# ============================================================================
-# Main Entry Point
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Dev entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
-    
-    print(f"Starting {settings.app_name} v{settings.app_version}")
-    print("=" * 60)
-    print(f"📚 API Docs: http://localhost:8000/docs")
-    print(f"🏥 Health Check: http://localhost:8000/api/v1/health")
-    print(f"⚙️  Debug Mode: {settings.debug}")
-    print("=" * 60)
-    
     uvicorn.run(
         "backend.api.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.debug
+        reload=settings.debug,
     )

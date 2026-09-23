@@ -1,115 +1,257 @@
+﻿"""
+NL2SQL Multi-Agent System — Streamlit Frontend
+
+Connects to the canonical backend API (POST /api/v1/query) and displays
+the full 8-agent pipeline result:
+- Natural language answer
+- Generated SQL (and optimized SQL)
+- Validation status (syntax / schema / semantic)
+- Security status
+- Execution results table
+- Agent explanation & insights
+- Full processing log / agent trace
+"""
+
 import streamlit as st
 import requests
 import pandas as pd
 import json
 
-# Page Config
-st.set_page_config(page_title="NL2SQL Multi-Agent", layout="wide")
+# ---------------------------------------------------------------------------
+# Page configuration
+# ---------------------------------------------------------------------------
 
-# Custom CSS for better look
+st.set_page_config(
+    page_title="NL2SQL Multi-Agent",
+    page_icon="🤖",
+    layout="wide"
+)
+
+# ---------------------------------------------------------------------------
+# Custom CSS
+# ---------------------------------------------------------------------------
+
 st.markdown("""
 <style>
-.stChatMessage { 
-    border-radius: 10px; 
-    padding: 10px; 
-}
-.code-block { 
-    background-color: #f0f2f6; 
-    padding: 10px; 
-    border-radius: 5px; 
-    font-family: monospace; 
-}
+.stChatMessage { border-radius: 10px; padding: 10px; }
+.status-badge { padding: 3px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+.status-pass { background-color: #d4edda; color: #155724; }
+.status-fail { background-color: #f8d7da; color: #721c24; }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar Configuration
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
 with st.sidebar:
     st.title("⚙️ Settings")
     api_url = st.text_input("Backend API URL", value="http://localhost:8000")
+    user_role = st.selectbox("User Role", ["user", "analyst", "admin", "guest"], index=0)
+    include_explanation = st.checkbox("Include explanation", value=True)
+    show_processing_log = st.checkbox("Show agent processing log", value=False)
     st.divider()
-    st.info("💡 **Tips:**\n- Ask questions like 'Show me all artists'\n- Try 'List all customers'\n- System auto-validates SQL before running")
+    st.info(
+        "💡 **Pipeline:**\n"
+        "1. Intent Understanding\n"
+        "2. Schema Retrieval (RAG)\n"
+        "3. SQL Generation\n"
+        "4. Validation (retry loop)\n"
+        "5. Security Check\n"
+        "6. Optimization\n"
+        "7. Execution\n"
+        "8. Explanation"
+    )
 
-# Main Title
+# ---------------------------------------------------------------------------
+# Main title
+# ---------------------------------------------------------------------------
+
 st.title("🤖 NL2SQL Multi-Agent System")
-st.caption("Powered by LangGraph • Intent → Schema → SQL → Validate → Execute → Explain")
+st.caption(
+    "Powered by LangGraph · 8 agents: "
+    "Intent → Schema → SQL Gen → Validate → Security → Optimize → Execute → Explain"
+)
 
-# Initialize Chat History
+# ---------------------------------------------------------------------------
+# Chat history
+# ---------------------------------------------------------------------------
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if "sql" in message:
+        if message.get("sql"):
             st.code(message["sql"], language="sql")
-        if "data" in message and message["data"]:
-            df = pd.DataFrame(message["data"])
-            st.dataframe(df, use_container_width=True)
-        if "explanation" in message:
-            with st.expander("🧠 Agent Explanation"):
-                st.markdown(message["explanation"])
+        if message.get("data"):
+            st.dataframe(pd.DataFrame(message["data"]), use_container_width=True)
 
-# Chat Input
+# ---------------------------------------------------------------------------
+# Chat input
+# ---------------------------------------------------------------------------
+
 if prompt := st.chat_input("Ask anything about your database..."):
-    # 1. Show User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    
-    # 2. Call Backend API
+
     with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        message_placeholder.markdown("🔄 Agents are working...\n- 🔍 Understanding Intent\n- 📂 Retrieving Schema\n- 📝 Generating SQL\n- ✅ Validating Query\n- 🚀 Executing & Explaining")
-        
+        placeholder = st.empty()
+        placeholder.markdown(
+            "🔄 Running 8-agent pipeline...\n"
+            "1️⃣ Understanding intent  2️⃣ Retrieving schema  3️⃣ Generating SQL  "
+            "4️⃣ Validating  5️⃣ Security check  6️⃣ Optimizing  7️⃣ Executing  8️⃣ Explaining"
+        )
+
         try:
             response = requests.post(
                 f"{api_url}/api/v1/query",
-                json={"question": prompt},
-                timeout=60
+                json={
+                    "question": prompt,
+                    "user_role": user_role,
+                    "include_explanation": include_explanation,
+                },
+                timeout=120
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
-                
-                # Extract fields - matching backend NLQueryResponse schema
-                explanation_obj = data.get("explanation") or {}
-                sql_query = data.get("generated_sql", "")
+                success = data.get("success", False)
+
+                # ----------------------------------------------------------
+                # Answer / result summary
+                # ----------------------------------------------------------
+                explanation = data.get("explanation") or {}
+                answer = explanation.get("result_summary") or (
+                    "Pipeline completed but no result summary generated."
+                    if success else
+                    f"❌ Pipeline failed: {data.get('error_message', 'Unknown error')}"
+                )
+                placeholder.markdown(f"**Answer:** {answer}")
+
+                # ----------------------------------------------------------
+                # SQL display
+                # ----------------------------------------------------------
+                optimized_sql = data.get("optimized_sql")
+                generated_sql = data.get("generated_sql")
+                display_sql = optimized_sql or generated_sql
+
+                if display_sql:
+                    if optimized_sql and generated_sql and optimized_sql != generated_sql:
+                        sql_tab1, sql_tab2 = st.tabs(["✅ Optimized SQL", "📝 Generated SQL"])
+                        with sql_tab1:
+                            st.code(optimized_sql, language="sql")
+                        with sql_tab2:
+                            st.code(generated_sql, language="sql")
+                    else:
+                        st.code(display_sql, language="sql")
+
+                # ----------------------------------------------------------
+                # Validation status
+                # ----------------------------------------------------------
+                validation = data.get("validation") or {}
+                if validation:
+                    with st.expander("✅ Validation Status", expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Syntax", "✓" if validation.get("syntax_valid") else "✗")
+                        col2.metric("Schema", "✓" if validation.get("schema_valid") else "✗")
+                        col3.metric("Semantic", "✓" if validation.get("semantic_valid") else "✗")
+                        if validation.get("errors"):
+                            st.error("Validation errors: " + "; ".join(validation["errors"][:3]))
+                        retry_count = data.get("retry_count", 0)
+                        if retry_count:
+                            st.info(f"SQL generation retried {retry_count} time(s)")
+
+                # ----------------------------------------------------------
+                # Security status
+                # ----------------------------------------------------------
+                security = data.get("security") or {}
+                if security:
+                    with st.expander("🔒 Security Status", expanded=False):
+                        sec_pass = security.get("passed", False)
+                        sec_badge = "✅ APPROVED" if sec_pass else "❌ REJECTED"
+                        st.markdown(f"**Decision:** {sec_badge}")
+                        st.markdown(f"**Role:** {security.get('role', 'unknown')}")
+                        if security.get("violations"):
+                            st.error("Violations: " + "; ".join(security["violations"][:3]))
+
+                # ----------------------------------------------------------
+                # Query results
+                # ----------------------------------------------------------
                 exec_result = data.get("execution_result") or {}
-                results = exec_result.get("rows", [])
-                explanation = explanation_obj.get("sql_explanation", "")
-                answer = explanation_obj.get("result_summary", "No answer generated.")
-                
-                # Display Response
-                message_placeholder.markdown(f"**Answer:** {answer}")
-                
-                if sql_query:
-                    st.code(sql_query, language="sql")
-                
-                if results:
-                    df = pd.DataFrame(results)
-                    st.dataframe(df, use_container_width=True)
-                
-                if explanation:
-                    with st.expander("🧠 View Agent Explanation"):
-                        st.markdown(explanation)
-                
+                rows = exec_result.get("rows", [])
+                columns = exec_result.get("columns", [])
+
+                if rows and columns:
+                    st.subheader("📊 Results")
+                    try:
+                        df = pd.DataFrame(rows, columns=columns)
+                        st.dataframe(df, use_container_width=True)
+                    except Exception:
+                        st.write(rows)
+                    st.caption(
+                        f"{exec_result.get('row_count', len(rows))} rows "
+                        f"in {exec_result.get('execution_time_ms', 0):.1f}ms"
+                    )
+                    if exec_result.get("warning"):
+                        st.warning(exec_result["warning"])
+                elif not success and exec_result.get("error_message"):
+                    st.error(f"Execution error: {exec_result['error_message']}")
+
+                # ----------------------------------------------------------
+                # Explanation & insights
+                # ----------------------------------------------------------
+                sql_explanation = explanation.get("sql_explanation", "")
+                insights = explanation.get("insights", [])
+
+                if sql_explanation or insights:
+                    with st.expander("🧠 Agent Explanation", expanded=False):
+                        if sql_explanation:
+                            st.markdown(f"**SQL explanation:** {sql_explanation}")
+                        if insights:
+                            st.markdown("**Insights:**")
+                            for insight in insights:
+                                st.markdown(f"- {insight}")
+
+                # ----------------------------------------------------------
+                # Processing log
+                # ----------------------------------------------------------
+                if show_processing_log:
+                    log = data.get("processing_log", [])
+                    if log:
+                        with st.expander("🔍 Agent Processing Log", expanded=False):
+                            for entry in log:
+                                st.text(entry)
+
+                # ----------------------------------------------------------
                 # Save to history
+                # ----------------------------------------------------------
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
-                    "sql": sql_query,
-                    "data": results,
-                    "explanation": explanation
+                    "sql": display_sql,
+                    "data": rows if (rows and columns) else None,
                 })
+
             else:
-                error_msg = f"❌ Error {response.status_code}: {response.text}"
-                message_placeholder.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                
+                error_text = f"❌ Backend error {response.status_code}: {response.text[:300]}"
+                placeholder.error(error_text)
+                st.session_state.messages.append({"role": "assistant", "content": error_text})
+
         except requests.exceptions.ConnectionError:
-            error_msg = "❌ Could not connect to Backend. Is `uvicorn` running on port 8000?"
-            message_placeholder.error(error_msg)
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            msg = (
+                f"❌ Cannot connect to backend at {api_url}. "
+                "Is uvicorn backend.api.main:app running on port 8000?"
+            )
+            placeholder.error(msg)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+
+        except requests.exceptions.Timeout:
+            msg = "❌ Request timed out (>120s). The pipeline is taking too long."
+            placeholder.error(msg)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+
         except Exception as e:
-            message_placeholder.error(f"❌ Unexpected error: {str(e)}")
+            placeholder.error(f"❌ Unexpected error: {e}")

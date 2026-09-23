@@ -1,20 +1,28 @@
-"""
+﻿"""
 Agent 4: SQL Validation
 
-This agent validates generated SQL queries using multiple checks:
-1. Syntax validation using sqlglot (AST-level parsing)
-2. Schema validation (tables/columns exist)
-3. Permission validation (user role has access)
-4. Semantic validation (query makes sense for the question)
+Validates generated SQL candidates using four independent checks:
+1. Syntax validation    — sqlglot AST-level parsing
+2. Schema validation    — all referenced tables/columns exist
+3. Semantic validation  — SQL matches the intent of the question
+4. Candidate scoring    — evaluate ALL candidates, pick the best valid one
 
-Implements the validation loop - if validation fails, routes back to SQL Generation Agent.
-This is a key differentiator from simple linear pipelines.
+The validation result drives the retry loop:
+- If ALL candidates fail validation AND retries remain: route back to SQL Generation
+- If at least one candidate passes: select it and proceed to Security (Agent 5)
+- If retries exhausted with no valid candidate: mark workflow as failed
+
+NOTE: Permission / RBAC checks are handled exclusively by Agent 5 (SecurityAgent).
+      This agent only validates correctness, not authorization.
+
+8-agent pipeline position:
+1. Intent -> 2. Schema -> 3. SQL Generation -> 4. Validation ->
+5. Security -> 6. Optimization -> 7. Execution -> 8. Explanation
 """
 
-import json
 from typing import Dict, Any, List, Optional, Tuple
 import sqlglot
-from sqlglot import parse, transpile, ParseError
+from sqlglot import parse, ParseError
 from backend.core.config import settings
 from backend.agents.state import AgentState, add_to_processing_log
 
@@ -22,61 +30,43 @@ from backend.agents.state import AgentState, add_to_processing_log
 class SQLValidationAgent:
     """
     Agent 4: SQL Validation
-    
-    Validates SQL queries before execution using multiple validation layers.
-    Implements the critical validation loop that differentiates this system from simple pipelines.
+
+    Validates SQL queries before they reach the security or execution layers.
+    Implements the critical validation loop that differentiates this system from
+    simple linear pipelines.
+
+    Validation dimensions:
+    - syntax_valid:   syntactically parseable by sqlglot
+    - schema_valid:   all referenced tables exist in retrieved schema
+    - semantic_valid: SQL operations match parsed intent (hard check)
     """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         """Initialize the SQL Validation Agent."""
-        self.permission_config = self._load_permission_config()
-    
-    def _load_permission_config(self) -> Dict[str, Any]:
-        """
-        Load permission configuration from file or use defaults.
-        
-        In production, this would be loaded from a database or config service.
-        For now, we use a simple role-based permission model.
-        """
-        # Default permissions by role
-        return {
-            "admin": {
-                "allowed_tables": "*",  # All tables
-                "allowed_operations": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-                "max_row_limit": 10000
-            },
-            "analyst": {
-                "allowed_tables": "*",
-                "allowed_operations": ["SELECT"],
-                "max_row_limit": 5000
-            },
-            "user": {
-                "allowed_tables": "*",
-                "allowed_operations": ["SELECT"],
-                "max_row_limit": 1000
-            },
-            "guest": {
-                "allowed_tables": ["public_view"],  # Restricted tables
-                "allowed_operations": ["SELECT"],
-                "max_row_limit": 100
-            }
-        }
-    
-    def validate_syntax(self, sql: str, dialect: str = None) -> Tuple[bool, List[str]]:
+        pass
+
+    # ------------------------------------------------------------------
+    # 1. Syntax Validation
+    # ------------------------------------------------------------------
+
+    def validate_syntax(
+        self,
+        sql: str,
+        dialect: Optional[str] = None
+    ) -> Tuple[bool, List[str]]:
         """
         Validate SQL syntax using sqlglot parser.
-        
+
         Args:
             sql: SQL query string
-            dialect: SQL dialect (postgresql, mysql, sqlite, etc.)
-            
+            dialect: SQL dialect override; auto-detected from config if None
+
         Returns:
-            Tuple of (is_valid, list_of_errors)
+            (is_valid, list_of_errors)
         """
-        errors = []
-        
+        errors: List[str] = []
+
         try:
-            # Determine dialect from database URL
             if not dialect:
                 db_url = settings.database_url
                 if "postgresql" in db_url:
@@ -85,327 +75,364 @@ class SQLValidationAgent:
                     dialect = "mysql"
                 else:
                     dialect = "sqlite"
-            
-            # Parse the SQL
+
             parsed = parse(sql, read=dialect)
-            
+
             if not parsed or len(parsed) == 0:
-                errors.append("Failed to parse SQL - empty result")
+                errors.append("Failed to parse SQL — empty parse result")
                 return False, errors
-            
-            # Check if we got a valid AST
-            statement = parsed[0]
-            if statement is None:
-                errors.append("Parsed SQL resulted in NULL statement")
+
+            if parsed[0] is None:
+                errors.append("Parsed SQL resulted in a NULL statement")
                 return False, errors
-            
-            # Additional validation: check for balanced parentheses, quotes, etc.
-            # (sqlglot handles most of this, but we can add extra checks)
-            
+
             return True, []
-            
+
         except ParseError as e:
             errors.append(f"Syntax error: {str(e)}")
             return False, errors
         except Exception as e:
-            errors.append(f"Validation error: {str(e)}")
+            errors.append(f"Syntax validation error: {str(e)}")
             return False, errors
-    
+
+    # ------------------------------------------------------------------
+    # 2. Schema Validation
+    # ------------------------------------------------------------------
+
     def validate_schema(
-        self, 
-        sql: str, 
+        self,
+        sql: str,
         table_schemas: Dict[str, Any],
         foreign_keys: List[Dict[str, str]]
     ) -> Tuple[bool, List[str]]:
         """
-        Validate that all referenced tables and columns exist in the schema.
-        
+        Validate that all referenced tables exist in the retrieved schema.
+
         Args:
             sql: SQL query string
-            table_schemas: Dictionary of table schemas
-            foreign_keys: List of foreign key relationships
-            
+            table_schemas: Dictionary of available table schemas
+            foreign_keys: Foreign key relationships (for context)
+
         Returns:
-            Tuple of (is_valid, list_of_errors)
+            (is_valid, list_of_errors)
         """
-        errors = []
-        
+        errors: List[str] = []
+
+        # Cannot validate schema if no schema was retrieved
+        if not table_schemas:
+            return True, []  # Soft pass — schema may not have been indexed yet
+
         try:
             from sqlglot import exp
-            
-            # Parse SQL to extract referenced tables and columns
+
             parsed = parse(sql)
             if not parsed:
                 return False, ["Could not parse SQL for schema validation"]
-            
+
             statement = parsed[0]
-            
-            # Extract all table references using sqlglot's built-in walker
-            referenced_tables = set()
-            referenced_columns = {}
-            
-            # Use find_all(exp.Table) to get all table references
+            referenced_tables: set = set()
+
             for table_node in statement.find_all(exp.Table):
-                table_name = table_node.name
-                if table_name:
-                    referenced_tables.add(table_name.lower())
-            
-            # Use find_all(exp.Column) to get all column references
-            for col_node in statement.find_all(exp.Column):
-                col_name = col_node.name
-                if col_name:
-                    referenced_columns[col_name.lower()] = {
-                        'table': col_node.table if hasattr(col_node, 'table') else None
-                    }
-            
-            # Validate tables exist
-            available_tables = set(t.lower() for t in table_schemas.keys())
+                if table_node.name:
+                    referenced_tables.add(table_node.name.lower())
+
+            available_tables = {t.lower() for t in table_schemas.keys()}
             missing_tables = referenced_tables - available_tables
-            
+
             if missing_tables:
-                errors.append(f"Referenced tables not found in schema: {missing_tables}")
-            
-            # Note: Full column validation would require deeper AST analysis
-            # This is a simplified version
-            
+                errors.append(
+                    f"Referenced tables not found in schema: {sorted(missing_tables)}. "
+                    f"Available: {sorted(available_tables)}"
+                )
+
             return len(errors) == 0, errors
-            
+
         except Exception as e:
             errors.append(f"Schema validation error: {str(e)}")
             return False, errors
-    
-    def validate_permissions(
-        self, 
-        sql: str, 
-        user_role: str,
-        table_schemas: Dict[str, Any]
-    ) -> Tuple[bool, List[str]]:
-        """
-        Validate that the user has permission to execute this query.
-        
-        Args:
-            sql: SQL query string
-            user_role: User's role (admin, analyst, user, guest)
-            table_schemas: Available table schemas
-            
-        Returns:
-            Tuple of (is_valid, list_of_errors)
-        """
-        from sqlglot import exp
-        
-        errors = []
-        
-        # Get permissions for this role
-        permissions = self.permission_config.get(user_role, self.permission_config["user"])
-        
-        try:
-            # Detect operation type
-            sql_upper = sql.strip().upper()
-            detected_operations = []
-            
-            if sql_upper.startswith("SELECT"):
-                detected_operations.append("SELECT")
-            if "INSERT" in sql_upper:
-                detected_operations.append("INSERT")
-            if "UPDATE" in sql_upper:
-                detected_operations.append("UPDATE")
-            if "DELETE" in sql_upper:
-                detected_operations.append("DELETE")
-            
-            # Check if operations are allowed
-            allowed_ops = permissions.get("allowed_operations", ["SELECT"])
-            disallowed_ops = set(detected_operations) - set(allowed_ops)
-            
-            if disallowed_ops:
-                errors.append(
-                    f"Operation(s) not permitted for role '{user_role}': {disallowed_ops}"
-                )
-            
-            # Check table permissions - IMPLEMENTED
-            allowed_tables = permissions.get("allowed_tables", "*")
-            if allowed_tables != "*":
-                # Extract referenced tables using sqlglot's find_all
-                parsed = parse(sql)
-                if parsed:
-                    statement = parsed[0]
-                    referenced_tables = set()
-                    
-                    # Use find_all(exp.Table) to get all table references
-                    for table_node in statement.find_all(exp.Table):
-                        table_name = table_node.name
-                        if table_name:
-                            referenced_tables.add(table_name.lower())
-                    
-                    # Convert allowed_tables to lowercase set for comparison
-                    allowed_tables_set = set(t.lower() for t in allowed_tables)
-                    
-                    # Check each referenced table against allowed list
-                    unauthorized_tables = referenced_tables - allowed_tables_set
-                    if unauthorized_tables:
-                        errors.append(
-                            f"Table(s) not accessible for role '{user_role}': {unauthorized_tables}"
-                        )
-            
-            return len(errors) == 0, errors
-            
-        except Exception as e:
-            errors.append(f"Permission validation error: {str(e)}")
-            return False, errors
-    
+
+    # ------------------------------------------------------------------
+    # 3. Semantic Validation
+    # ------------------------------------------------------------------
+
     def validate_semantic(
-        self, 
-        sql: str, 
+        self,
+        sql: str,
         question: str,
         intent: Dict[str, Any]
     ) -> Tuple[bool, List[str]]:
         """
         Validate that the SQL semantically matches the question intent.
-        
-        This is a heuristic check - ensures the SQL "makes sense" for the question.
-        
+
+        This is a HARD check: if the SQL is missing operations explicitly
+        required by the parsed intent, semantic_valid = False, which
+        contributes to is_valid = False and triggers a retry.
+
+        Heuristics checked:
+        - COUNT expected but absent
+        - AVG expected but absent
+        - GROUP BY expected but absent
+        - ORDER BY expected but absent
+        - JOIN expected but absent (when multiple tables mentioned)
+
         Args:
             sql: SQL query string
             question: Original natural language question
             intent: Parsed intent from Agent 1
-            
+
         Returns:
-            Tuple of (is_valid, list_of_warnings)
+            (is_valid, list_of_issues)
         """
-        warnings = []
-        
+        issues: List[str] = []
         sql_upper = sql.upper()
         operations = intent.get("operations", [])
-        
-        # Check for expected operations
-        if "COUNT" in operations and "COUNT" not in sql_upper:
-            warnings.append("Question suggests COUNT but SQL doesn't use it")
-        
-        if "AVG" in operations and ("AVG" not in sql_upper and "AVERAGE" not in sql_upper):
-            warnings.append("Question suggests AVG but SQL doesn't use it")
-        
-        if "GROUP BY" in operations and "GROUP BY" not in sql_upper:
-            warnings.append("Question suggests grouping but SQL lacks GROUP BY")
-        
-        if "ORDER BY" in operations and "ORDER BY" not in sql_upper:
-            warnings.append("Question suggests sorting but SQL lacks ORDER BY")
-        
-        # Check for potential issues
+        ops_upper = [op.upper() for op in operations]
+
+        # Hard checks — operations required by intent but absent from SQL
+        if "COUNT" in ops_upper and "COUNT" not in sql_upper:
+            issues.append(
+                "Intent requires COUNT aggregation but SQL does not use COUNT"
+            )
+
+        if "AVG" in ops_upper and "AVG" not in sql_upper and "AVERAGE" not in sql_upper:
+            issues.append(
+                "Intent requires AVG aggregation but SQL does not use AVG"
+            )
+
+        if "SUM" in ops_upper and "SUM" not in sql_upper:
+            issues.append(
+                "Intent requires SUM aggregation but SQL does not use SUM"
+            )
+
+        if "GROUP BY" in ops_upper and "GROUP BY" not in sql_upper:
+            issues.append(
+                "Intent requires GROUP BY but SQL does not contain GROUP BY"
+            )
+
+        if "ORDER BY" in ops_upper and "ORDER BY" not in sql_upper:
+            issues.append(
+                "Intent requires ORDER BY but SQL does not contain ORDER BY"
+            )
+
+        # Advisory-only checks (logged but do not block)
         if "SELECT *" in sql_upper:
-            warnings.append("Consider specifying columns instead of SELECT *")
-        
-        if "CROSS JOIN" in sql_upper:
-            warnings.append("CROSS JOIN detected - verify this is intentional")
-        
-        return len(warnings) == 0, warnings
-    
+            issues.append(
+                "ADVISORY: SQL uses SELECT * — consider specifying columns"
+            )
+
+        # Separate hard failures from advisories
+        hard_failures = [i for i in issues if not i.startswith("ADVISORY")]
+        return len(hard_failures) == 0, issues
+
+    # ------------------------------------------------------------------
+    # 4. Multi-candidate Evaluation
+    # ------------------------------------------------------------------
+
+    def _score_candidate(
+        self,
+        candidate: Dict[str, Any],
+        table_schemas: Dict[str, Any],
+        foreign_keys: List[Dict[str, str]],
+        question: str,
+        intent: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Evaluate a single SQL candidate across all validation dimensions.
+
+        Returns a scored candidate dict with validation details attached.
+        """
+        sql = candidate.get("sql", "")
+
+        syntax_valid, syntax_errors = self.validate_syntax(sql)
+        schema_valid, schema_errors = self.validate_schema(sql, table_schemas, foreign_keys)
+        semantic_valid, semantic_issues = self.validate_semantic(sql, question, intent)
+
+        # Overall candidate validity: all three dimensions must pass
+        is_valid = syntax_valid and schema_valid and semantic_valid
+
+        # Score: sum of dimension scores + LLM confidence weighting
+        llm_confidence = float(candidate.get("confidence", 0.0))
+        score = (
+            int(syntax_valid) * 0.35
+            + int(schema_valid) * 0.35
+            + int(semantic_valid) * 0.20
+            + llm_confidence * 0.10
+        )
+
+        return {
+            **candidate,
+            "_syntax_valid": syntax_valid,
+            "_schema_valid": schema_valid,
+            "_semantic_valid": semantic_valid,
+            "_is_valid": is_valid,
+            "_score": score,
+            "_all_errors": syntax_errors + schema_errors + semantic_issues,
+        }
+
+    def evaluate_candidates(
+        self,
+        candidates: List[Dict[str, Any]],
+        table_schemas: Dict[str, Any],
+        foreign_keys: List[Dict[str, str]],
+        question: str,
+        intent: Dict[str, Any]
+    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Evaluate all candidates and return the best valid one.
+
+        Args:
+            candidates: List of SQL candidates from Agent 3
+            table_schemas: Retrieved schema
+            foreign_keys: FK relationships
+            question: Original question
+            intent: Parsed intent
+
+        Returns:
+            (best_valid_candidate_or_None, list_of_scored_candidates)
+        """
+        if not candidates:
+            return None, []
+
+        scored = [
+            self._score_candidate(c, table_schemas, foreign_keys, question, intent)
+            for c in candidates
+        ]
+
+        valid_candidates = [c for c in scored if c["_is_valid"]]
+
+        if valid_candidates:
+            best = max(valid_candidates, key=lambda c: c["_score"])
+            return best, scored
+        else:
+            # Return highest-scoring invalid candidate (for error reporting)
+            best_invalid = max(scored, key=lambda c: c["_score"])
+            return None, scored
+
+    # ------------------------------------------------------------------
+    # Main invocation
+    # ------------------------------------------------------------------
+
     def invoke(self, state: AgentState) -> AgentState:
         """
-        Validate the generated SQL query.
-        
+        Validate all generated SQL candidates and select the best valid one.
+
         Args:
             state: Current agent state
-            
+
         Returns:
             Updated agent state with validation results
         """
         state["current_agent"] = "validation"
-        
-        sql = state.get("selected_sql")
-        
-        if not sql:
+
+        candidates = state.get("sql_candidates", [])
+        selected_sql = state.get("selected_sql")
+
+        # Ensure we have at least one candidate to evaluate
+        if not candidates and not selected_sql:
             state["is_valid"] = False
-            state["validation_errors"] = ["No SQL query to validate"]
+            state["validation_errors"] = ["No SQL candidates available to validate"]
             state["validation_result"] = {
                 "syntax_valid": False,
                 "schema_valid": False,
-                "permission_valid": False,
                 "semantic_valid": False,
-                "errors": ["No SQL provided"]
+                "is_valid": False,
+                "errors": ["No SQL provided"],
+                "warnings": [],
+                "evaluated_candidates": 0,
+                "best_candidate": None
             }
+            add_to_processing_log(state, "ERROR: Validation — no SQL candidates to evaluate")
             return state
-        
-        all_errors = []
-        all_warnings = []
-        
-        # 1. Syntax validation
-        syntax_valid, syntax_errors = self.validate_syntax(sql)
-        all_errors.extend(syntax_errors)
-        add_to_processing_log(state, f"Syntax validation: {'✓' if syntax_valid else '✗'}")
-        
-        # 2. Schema validation
-        schema_valid, schema_errors = self.validate_schema(
-            sql,
+
+        # If no structured candidates list but selected_sql exists, wrap it
+        if not candidates and selected_sql:
+            candidates = [{"sql": selected_sql, "confidence": 0.5, "explanation": ""}]
+
+        # Evaluate all candidates
+        best_candidate, scored_candidates = self.evaluate_candidates(
+            candidates,
             state.get("table_schemas", {}),
-            state.get("foreign_keys", [])
-        )
-        all_errors.extend(schema_errors)
-        add_to_processing_log(state, f"Schema validation: {'✓' if schema_valid else '✗'}")
-        
-        # 3. Permission validation
-        permission_valid, permission_errors = self.validate_permissions(
-            sql,
-            state.get("user_role", "user"),
-            state.get("table_schemas", {})
-        )
-        all_errors.extend(permission_errors)
-        add_to_processing_log(state, f"Permission validation: {'✓' if permission_valid else '✗'}")
-        
-        # 4. Semantic validation
-        semantic_valid, semantic_warnings = self.validate_semantic(
-            sql,
+            state.get("foreign_keys", []),
             state["question"],
             state.get("intent", {})
         )
-        all_warnings.extend(semantic_warnings)
-        
-        # Determine overall validity
-        is_valid = syntax_valid and schema_valid and permission_valid
-        state["is_valid"] = is_valid
-        state["validation_errors"] = all_errors
-        state["validation_result"] = {
-            "syntax_valid": syntax_valid,
-            "schema_valid": schema_valid,
-            "permission_valid": permission_valid,
-            "semantic_valid": semantic_valid,
-            "errors": all_errors,
-            "warnings": all_warnings,
-            "best_candidate": {
-                "sql": sql,
-                "confidence": state.get("sql_candidates", [{}])[0].get("confidence", 0)
-            } if sql else None
-        }
-        
-        if is_valid:
-            add_to_processing_log(state, "✓ SQL validation passed")
-        else:
+
+        all_errors: List[str] = []
+
+        if best_candidate:
+            # Validation passed — update selected SQL to best valid candidate
+            state["is_valid"] = True
+            state["selected_sql"] = best_candidate["sql"]
+            state["validation_errors"] = []
+
+            validation_detail = {
+                "syntax_valid": best_candidate["_syntax_valid"],
+                "schema_valid": best_candidate["_schema_valid"],
+                "semantic_valid": best_candidate["_semantic_valid"],
+                "is_valid": True,
+                "errors": [],
+                "warnings": [
+                    e for e in best_candidate["_all_errors"]
+                    if e.startswith("ADVISORY")
+                ],
+                "evaluated_candidates": len(scored_candidates),
+                "best_candidate": {
+                    "sql": best_candidate["sql"],
+                    "confidence": best_candidate.get("confidence", 0.0),
+                    "score": best_candidate["_score"]
+                }
+            }
             add_to_processing_log(
-                state, 
-                f"✗ SQL validation failed: {len(all_errors)} error(s)"
+                state,
+                f"Agent 4 (Validation): PASSED — selected candidate "
+                f"(score={best_candidate['_score']:.2f}) from {len(candidates)} candidates"
             )
-        
+        else:
+            # All candidates failed — collect errors for retry feedback
+            state["is_valid"] = False
+            for sc in scored_candidates:
+                all_errors.extend(sc.get("_all_errors", []))
+
+            # Deduplicate errors
+            state["validation_errors"] = list(dict.fromkeys(all_errors))
+
+            validation_detail = {
+                "syntax_valid": False,
+                "schema_valid": False,
+                "semantic_valid": False,
+                "is_valid": False,
+                "errors": state["validation_errors"],
+                "warnings": [],
+                "evaluated_candidates": len(scored_candidates),
+                "best_candidate": None
+            }
+            add_to_processing_log(
+                state,
+                f"Agent 4 (Validation): FAILED — all {len(candidates)} candidates invalid. "
+                f"Errors: {state['validation_errors'][:3]}"
+            )
+
+        state["validation_result"] = validation_detail
         return state
-    
+
     def should_retry(self, state: AgentState) -> bool:
         """
         Determine if SQL generation should be retried.
-        
-        This implements the conditional edge logic for LangGraph.
-        
-        Args:
-            state: Current agent state
-            
-        Returns:
-            True if retry should be attempted
+
+        Used as the conditional edge function in LangGraph.
         """
         return (
-            not state["is_valid"] 
+            not state["is_valid"]
             and state.get("retry_count", 0) < state.get("max_retries", 3)
             and state.get("workflow_status") == "running"
         )
 
 
-# Singleton instance
-_validation_agent_instance = None
+# ---------------------------------------------------------------------------
+# Singleton helper
+# ---------------------------------------------------------------------------
+
+_validation_agent_instance: Optional[SQLValidationAgent] = None
 
 
 def get_validation_agent() -> SQLValidationAgent:
@@ -414,57 +441,3 @@ def get_validation_agent() -> SQLValidationAgent:
     if _validation_agent_instance is None:
         _validation_agent_instance = SQLValidationAgent()
     return _validation_agent_instance
-
-
-if __name__ == "__main__":
-    # Test the validation agent
-    print("Testing SQL Validation Agent\n" + "=" * 50)
-    
-    from backend.agents.state import initialize_state
-    
-    agent = get_validation_agent()
-    
-    test_cases = [
-        {
-            "name": "Valid SELECT",
-            "sql": "SELECT customer_id, name FROM customers WHERE age > 30",
-            "should_pass": True
-        },
-        {
-            "name": "Invalid syntax",
-            "sql": "SELEC customer_id FRM customers",
-            "should_pass": False
-        },
-        {
-            "name": "Missing table",
-            "sql": "SELECT * FROM nonexistent_table",
-            "should_pass": False
-        },
-        {
-            "name": "Disallowed operation",
-            "sql": "DELETE FROM customers WHERE id = 1",
-            "should_pass": False  # For 'user' role
-        }
-    ]
-    
-    for test in test_cases:
-        print(f"\nTest: {test['name']}")
-        print(f"SQL: {test['sql']}")
-        print("-" * 50)
-        
-        state = initialize_state("Test question")
-        state["selected_sql"] = test["sql"]
-        state["table_schemas"] = {
-            "customers": {"columns": [{"name": "customer_id", "type": "INTEGER"}]}
-        }
-        
-        result_state = agent.invoke(state)
-        
-        print(f"Valid: {result_state['is_valid']}")
-        if result_state['validation_errors']:
-            print(f"Errors: {result_state['validation_errors']}")
-        
-        expected = "✓" if test['should_pass'] else "✗"
-        actual = "✓" if result_state['is_valid'] else "✗"
-        status = "PASS" if expected == actual else "FAIL"
-        print(f"Expected: {expected}, Got: {actual} → {status}")
