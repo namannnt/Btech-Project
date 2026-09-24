@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for Agent 2: Schema Retrieval Agent
 
 Tests cover:
@@ -70,10 +70,12 @@ def test_introspect_no_engine():
     assert schema == {}
 
 
-def test_retrieve_without_chromadb_returns_empty():
+def test_retrieve_without_chromadb_returns_empty(monkeypatch):
     """When ChromaDB is not initialized, retrieve returns empty dicts."""
     agent = SchemaRetrievalAgent()
-    agent._initialized = False
+    monkeypatch.setattr(agent, "_initialize", lambda: None)
+    agent._initialized = True
+    agent.collection = None
     result = agent.retrieve_relevant_schema("test query", top_k=3)
     assert result["relevant_tables"] == []
     assert result["table_schemas"] == {}

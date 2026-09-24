@@ -1,4 +1,4 @@
-﻿"""Pydantic models for request/response schemas.
+"""Pydantic models for request/response schemas.
 
 All model names and field names are kept consistent with:
 - AgentState field names in backend/agents/state.py
@@ -33,6 +33,7 @@ class SchemaRetrievalResult(BaseModel):
 class SQLCandidate(BaseModel):
     """A single generated SQL candidate with confidence and explanation."""
     sql: str
+    parameters: Dict[str, Any] = Field(default_factory=dict)
     confidence: float = 0.0
     explanation: str = ""
 
@@ -122,6 +123,7 @@ class NLQueryResponse(BaseModel):
     intent: Optional[IntentUnderstanding] = None
     retrieved_schema: Optional[SchemaRetrievalResult] = None
     generated_sql: Optional[str] = None           # = optimized_sql or selected_sql
+    sql_parameters: Optional[Dict[str, Any]] = None
     optimized_sql: Optional[str] = None
     validation: Optional[ValidationResult] = None
     security: Optional[SecurityResult] = None      # NEW: security agent output

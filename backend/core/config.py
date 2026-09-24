@@ -1,4 +1,4 @@
-﻿"""
+"""
 Configuration management for the NL2SQL 8-Agent System.
 
 Loads environment variables and provides type-safe configuration.
@@ -120,3 +120,17 @@ settings = Settings()
 def get_settings() -> Settings:
     """Return the global Settings instance."""
     return settings
+
+
+def get_dynamic_db_url(database_id: Optional[str] = None) -> str:
+    """Resolve database_id to a safe SQLite connection URL."""
+    if not database_id or database_id == "sample":
+        return settings.database_url
+    
+    import re
+    import os
+    clean_id = re.sub(r'[^a-zA-Z0-9_-]', '', database_id)
+    db_path = os.path.abspath(f"backend/data/{clean_id}.db")
+    # Replace backslashes for Windows path in SQLAlchemy URL
+    db_path = db_path.replace('\\', '/')
+    return f"sqlite:///{db_path}"

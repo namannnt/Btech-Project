@@ -41,6 +41,7 @@ class SchemaRetrievalAgent:
         """Lazy initialization of ChromaDB and embeddings."""
         if self._initialized:
             return
+        self._cached_schemas = {}
         
         try:
             # Initialize embeddings
@@ -145,12 +146,13 @@ class SchemaRetrievalAgent:
             print(f"Schema introspection failed: {e}")
             return {}
     
-    def index_schema(self, schema_info: Dict[str, Any]):
+    def index_schema(self, schema_info: Dict[str, Any], database_id: str = "sample"):
         """
         Index the database schema into ChromaDB for retrieval.
         
         Args:
             schema_info: Schema information from introspect_schema()
+            database_id: Optional ID to associate with this schema
         """
         if not self._initialized:
             self._initialize()
@@ -160,7 +162,9 @@ class SchemaRetrievalAgent:
             return
         
         # Cache the schema for later retrieval (avoids re-introspection)
-        self._cached_schema = schema_info
+        if not hasattr(self, '_cached_schemas'):
+            self._cached_schemas = {}
+        self._cached_schemas[database_id] = schema_info
         
         documents = []
         metadatas = []
@@ -199,9 +203,10 @@ class SchemaRetrievalAgent:
             metadatas.append({
                 "table_name": table_name,
                 "column_count": table_info["column_count"],
-                "source": "database_schema"
+                "source": "database_schema",
+                "database_id": database_id
             })
-            ids.append(f"table_{table_name}")
+            ids.append(f"{database_id}_table_{table_name}")
         
         # Add to ChromaDB
         if documents:
@@ -216,7 +221,8 @@ class SchemaRetrievalAgent:
         self, 
         query: str, 
         intent: Optional[Dict[str, Any]] = None,
-        top_k: int = 5
+        top_k: int = 5,
+        database_id: str = "sample"
     ) -> Dict[str, Any]:
         """
         Retrieve the most relevant table schemas for the given query.
@@ -246,8 +252,10 @@ class SchemaRetrievalAgent:
         results = self.collection.query(
             query_texts=[enhanced_query],
             n_results=top_k * 2,  # Get extra results for filtering
+            where={"database_id": database_id},
             include=["documents", "metadatas", "distances"]
         )
+        print(f"DEBUG retrieve_relevant_schema for {database_id}: results = {results}")
         
         # Process results
         relevant_tables = []
@@ -268,8 +276,8 @@ class SchemaRetrievalAgent:
         # Get full schema for relevant tables from already-indexed data
         # NOTE: Schema was introspected at startup, no need to re-introspect
         # We retrieve from the stored schema cache instead
-        if self.db_engine and hasattr(self, '_cached_schema'):
-            full_schema = self._cached_schema
+        if hasattr(self, '_cached_schemas') and database_id in self._cached_schemas:
+            full_schema = self._cached_schemas[database_id]
             for table_name in relevant_tables[:top_k]:
                 if table_name in full_schema["tables"]:
                     table_schemas[table_name] = full_schema["tables"][table_name]
@@ -281,7 +289,24 @@ class SchemaRetrievalAgent:
                 or fk["referenced_table"] in relevant_tables[:top_k]
             ]
         else:
-            relevant_fks = []
+            # Fallback to direct introspection if not cached
+            try:
+                from backend.core.config import get_dynamic_db_url
+                self.connect_to_database(get_dynamic_db_url(database_id))
+                full_schema = self.introspect_schema()
+                if not hasattr(self, '_cached_schemas'):
+                    self._cached_schemas = {}
+                self._cached_schemas[database_id] = full_schema
+                for table_name in relevant_tables[:top_k]:
+                    if table_name in full_schema["tables"]:
+                        table_schemas[table_name] = full_schema["tables"][table_name]
+                relevant_fks = [
+                    fk for fk in full_schema["foreign_keys"]
+                    if fk["table"] in relevant_tables[:top_k] 
+                    or fk["referenced_table"] in relevant_tables[:top_k]
+                ]
+            except:
+                relevant_fks = []
         
         return {
             "relevant_tables": relevant_tables[:top_k],
@@ -307,11 +332,15 @@ class SchemaRetrievalAgent:
             if not self._initialized:
                 self._initialize()
             
+            db_id = state.get("database_id") or "sample"
+            from backend.core.config import get_dynamic_db_url
+            db_url = get_dynamic_db_url(db_id)
+            
             # Connect to database if not already connected
-            if not self.db_engine:
-                db_connected = self.connect_to_database()
+            if not self.db_engine or str(self.db_engine.url) != db_url:
+                db_connected = self.connect_to_database(db_url)
                 if not db_connected:
-                    add_to_processing_log(state, "WARNING: Could not connect to database")
+                    add_to_processing_log(state, f"WARNING: Could not connect to {db_url}")
             
             # Introspect and index schema if not already done
             # (In production, this would be done once at startup)
@@ -321,7 +350,8 @@ class SchemaRetrievalAgent:
             result = self.retrieve_relevant_schema(
                 query=state["question"],
                 intent=state.get("intent"),
-                top_k=5
+                top_k=5,
+                database_id=db_id
             )
             
             # Update state

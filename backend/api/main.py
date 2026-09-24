@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI Backend for the NL2SQL 8-Agent System
 
 Single canonical entry point — POST /api/v1/query runs the real orchestrator.
@@ -157,6 +157,7 @@ def _state_to_response(state: Dict[str, Any]) -> NLQueryResponse:
         intent=intent_obj,
         retrieved_schema=schema_obj,
         generated_sql=state.get("optimized_sql") or state.get("selected_sql"),
+        sql_parameters=state.get("sql_parameters"),
         optimized_sql=state.get("optimized_sql"),
         validation=validation_obj,
         security=security_obj,
@@ -277,6 +278,58 @@ async def list_databases():
         )
     ]
 
+
+@app.post("/api/v1/database/upload", tags=["Databases"])
+async def upload_database(file: __import__('fastapi').UploadFile = __import__('fastapi').File(...)):
+    """Upload a SQLite database for querying."""
+    import os
+    import uuid
+    from backend.agents.schema_agent import get_schema_agent
+    from backend.core.config import get_dynamic_db_url
+    
+    if not file.filename.endswith(".db") and not file.filename.endswith(".sqlite"):
+        raise HTTPException(status_code=400, detail="Invalid SQLite database. Please upload a valid .db file.")
+        
+    database_id = f"custom_{uuid.uuid4().hex[:8]}"
+    db_path = f"backend/data/{database_id}.db"
+    
+    try:
+        content = await file.read()
+        with open(db_path, "wb") as f:
+            f.write(content)
+            
+        agent = get_schema_agent()
+        db_url = get_dynamic_db_url(database_id)
+        
+        if agent.connect_to_database(db_url):
+            schema = agent.introspect_schema()
+            if not schema.get("tables"):
+                if getattr(agent, 'db_engine', None):
+                    agent.db_engine.dispose()
+                os.remove(db_path)
+                raise HTTPException(status_code=400, detail="Invalid SQLite database. No tables found.")
+                
+            agent.index_schema(schema, database_id)
+            
+            return {
+                "status": "connected",
+                "database_id": database_id,
+                "filename": file.filename,
+                "table_count": len(schema.get("tables", {})),
+                "tables": list(schema.get("tables", {}).keys())
+            }
+        else:
+            if getattr(agent, 'db_engine', None):
+                agent.db_engine.dispose()
+            os.remove(db_path)
+            raise HTTPException(status_code=400, detail="Could not connect to the uploaded database.")
+            
+    except Exception as e:
+        if os.path.exists(db_path):
+            if 'agent' in locals() and getattr(agent, 'db_engine', None):
+                agent.db_engine.dispose()
+            os.remove(db_path)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/v1/schema/index", tags=["Schema"])
 async def index_schema(

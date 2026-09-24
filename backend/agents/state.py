@@ -1,4 +1,4 @@
-﻿"""
+"""
 LangGraph State definition for the NL2SQL Multi-Agent System.
 
 Defines the shared AgentState TypedDict that flows through all 8 agents in the graph.
@@ -51,6 +51,7 @@ class AgentState(TypedDict):
     # -------------------------------------------------------------------------
     sql_candidates: List[Dict[str, Any]]   # Multiple candidate SQL queries
     selected_sql: Optional[str]            # Best validated candidate
+    sql_parameters: Dict[str, Any]         # Parameters for parameterized SQL
     generation_metadata: Dict[str, Any]    # Metadata about the generation step
 
     # -------------------------------------------------------------------------
@@ -138,6 +139,7 @@ def initialize_state(question: str, **kwargs: Any) -> AgentState:
         # Agent 3
         sql_candidates=[],
         selected_sql=None,
+        sql_parameters={},
         generation_metadata={},
         # Agent 4
         validation_result=None,

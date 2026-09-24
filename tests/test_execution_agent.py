@@ -52,7 +52,8 @@ def test_execute_invalid_sql_fails(agent_with_sqlite):
     assert result["error_message"] is not None
 
 
-def test_invoke_approved_state(agent_with_sqlite):
+def test_invoke_approved_state(agent_with_sqlite, monkeypatch):
+    monkeypatch.setattr("backend.core.config.get_dynamic_db_url", lambda x: str(agent_with_sqlite.db_engine.url))
     state = _approved_state("SELECT customer_id, name FROM customers")
     result = agent_with_sqlite.invoke(state)
     assert result["execution_success"] is True
@@ -60,8 +61,9 @@ def test_invoke_approved_state(agent_with_sqlite):
     assert len(result["query_results"]) == 2
 
 
-def test_invoke_blocked_without_security(agent_with_sqlite):
+def test_invoke_blocked_without_security(agent_with_sqlite, monkeypatch):
     """Execution MUST be refused when security_passed=False."""
+    monkeypatch.setattr("backend.core.config.get_dynamic_db_url", lambda x: str(agent_with_sqlite.db_engine.url))
     state = initialize_state("test")
     state["selected_sql"] = "SELECT * FROM customers"
     state["optimized_sql"] = "SELECT * FROM customers"
@@ -72,8 +74,9 @@ def test_invoke_blocked_without_security(agent_with_sqlite):
     assert "SECURITY GATE" in result["execution_error"]
 
 
-def test_invoke_blocked_without_validation(agent_with_sqlite):
+def test_invoke_blocked_without_validation(agent_with_sqlite, monkeypatch):
     """Execution MUST be refused when is_valid=False."""
+    monkeypatch.setattr("backend.core.config.get_dynamic_db_url", lambda x: str(agent_with_sqlite.db_engine.url))
     state = initialize_state("test")
     state["selected_sql"] = "SELECT * FROM customers"
     state["optimized_sql"] = "SELECT * FROM customers"
@@ -83,7 +86,8 @@ def test_invoke_blocked_without_validation(agent_with_sqlite):
     assert result["execution_success"] is False
 
 
-def test_invoke_no_sql(agent_with_sqlite):
+def test_invoke_no_sql(agent_with_sqlite, monkeypatch):
+    monkeypatch.setattr("backend.core.config.get_dynamic_db_url", lambda x: str(agent_with_sqlite.db_engine.url))
     state = initialize_state("test")
     state["is_valid"] = True
     state["security_passed"] = True
@@ -93,7 +97,8 @@ def test_invoke_no_sql(agent_with_sqlite):
     assert result["execution_success"] is False
 
 
-def test_execution_time_populated(agent_with_sqlite):
+def test_execution_time_populated(agent_with_sqlite, monkeypatch):
+    monkeypatch.setattr("backend.core.config.get_dynamic_db_url", lambda x: str(agent_with_sqlite.db_engine.url))
     state = _approved_state("SELECT COUNT(*) FROM customers")
     result = agent_with_sqlite.invoke(state)
     assert result["execution_time_ms"] >= 0.0

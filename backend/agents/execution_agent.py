@@ -80,7 +80,7 @@ class SQLExecutionAgent:
         except Exception as e:
             return False
 
-    def execute_query(self, sql: str) -> Dict[str, Any]:
+    def execute_query(self, sql: str, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Execute SQL query with safety limits.
 
@@ -92,6 +92,7 @@ class SQLExecutionAgent:
 
         Args:
             sql: SQL query to execute
+            parameters: Dictionary of parameters for parameterized queries
 
         Returns:
             Dict with keys: success, columns, rows, row_count,
@@ -124,7 +125,7 @@ class SQLExecutionAgent:
             # both file-based (check_same_thread safety) and in-memory (single-conn) cases.
             # Real timeout enforcement is handled at the OS/driver level for Postgres/MySQL.
             with self.db_engine.connect() as conn:  # type: ignore[union-attr]
-                db_result = conn.execute(text(sql))
+                db_result = conn.execute(text(sql), parameters or {})
 
                 # Get column names using public API (.keys())
                 result["columns"] = list(db_result.keys())
@@ -168,6 +169,13 @@ class SQLExecutionAgent:
         """
         state["current_agent"] = "sql_execution"
 
+        # Ensure we're connected to the right database for this state
+        db_id = state.get("database_id")
+        from backend.core.config import get_dynamic_db_url
+        expected_url = get_dynamic_db_url(db_id)
+        if not self.db_engine or str(self.db_engine.url) != expected_url:
+            self.connect_to_database(db_url=expected_url)
+
         # Hard security gate: never execute unapproved SQL
         if not state.get("security_passed", False):
             error_msg = (
@@ -196,7 +204,8 @@ class SQLExecutionAgent:
             add_to_processing_log(state, "ERROR: No SQL to execute")
             return state
 
-        result = self.execute_query(sql)
+        parameters = state.get("sql_parameters", {})
+        result = self.execute_query(sql, parameters)
 
         state["execution_success"] = result["success"]
         state["query_results"] = result["rows"]

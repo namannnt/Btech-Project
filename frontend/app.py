@@ -1,4 +1,4 @@
-﻿"""
+"""
 NL2SQL Multi-Agent System — Streamlit Frontend
 
 Connects to the canonical backend API (POST /api/v1/query) and displays
@@ -50,6 +50,42 @@ with st.sidebar:
     user_role = st.selectbox("User Role", ["user", "analyst", "admin", "guest"], index=0)
     include_explanation = st.checkbox("Include explanation", value=True)
     show_processing_log = st.checkbox("Show agent processing log", value=False)
+    
+    st.divider()
+    
+    st.title("🗄️ Database Connection")
+    db_file = st.file_uploader("Upload SQLite .db", type=["db", "sqlite"])
+    
+    if "db_info" not in st.session_state:
+        st.session_state.db_info = None
+        
+    if st.button("🔌 Connect Database") and db_file:
+        with st.spinner("Connecting and analyzing schema..."):
+            try:
+                files = {"file": (db_file.name, db_file, "application/octet-stream")}
+                upload_res = requests.post(f"{api_url}/api/v1/database/upload", files=files, timeout=60)
+                if upload_res.status_code == 200:
+                    st.session_state.db_info = upload_res.json()
+                    st.success("Successfully connected!")
+                else:
+                    st.error(f"Failed to connect: {upload_res.text}")
+            except Exception as e:
+                st.error(f"Error connecting: {e}")
+                
+    if st.session_state.db_info:
+        db_info = st.session_state.db_info
+        st.success("Status: Connected")
+        st.write(f"**Database:** {db_info.get('filename')}")
+        st.write(f"**Tables:** {db_info.get('table_count')}")
+        for table in db_info.get("tables", []):
+            st.markdown(f"- `{table}`")
+        
+        if st.button("Disconnect Custom DB"):
+            st.session_state.db_info = None
+            st.rerun()
+    else:
+        st.info("Status: Default (sample.db)")
+    
     st.divider()
     st.info(
         "💡 **Pipeline:**\n"
@@ -106,13 +142,17 @@ if prompt := st.chat_input("Ask anything about your database..."):
         )
 
         try:
+            payload = {
+                "question": prompt,
+                "user_role": user_role,
+                "include_explanation": include_explanation,
+            }
+            if st.session_state.db_info:
+                payload["database_id"] = st.session_state.db_info.get("database_id")
+
             response = requests.post(
                 f"{api_url}/api/v1/query",
-                json={
-                    "question": prompt,
-                    "user_role": user_role,
-                    "include_explanation": include_explanation,
-                },
+                json=payload,
                 timeout=120
             )
 

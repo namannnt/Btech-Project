@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for Agent 3: SQL Generation Agent
 
 Tests cover:
@@ -86,3 +86,25 @@ def test_retry_generation_increments_from_nonzero(agent_no_llm, sample_state):
     sample_state["retry_count"] = 2
     result = agent_no_llm.retry_generation(sample_state, ["Schema error"])
     assert result["retry_count"] == 3
+
+def test_ungrounded_schema_short_circuits_pipeline(sample_state):
+    agent = SQLGenerationAgent.__new__(SQLGenerationAgent)
+    agent.prompt_template = MagicMock()
+    agent.llm = MagicMock()
+    agent.json_parser = MagicMock()
+    
+    # Mock chain to return empty candidates and a reasoning
+    mock_chain = MagicMock()
+    mock_chain.invoke.return_value = {
+        "candidates": [],
+        "reasoning": "Requested entity 'employees' not found in schema."
+    }
+    
+    # Setup chain property manually
+    agent.prompt_template.__or__ = MagicMock(return_value=MagicMock(__or__=MagicMock(return_value=mock_chain)))
+    
+    result = agent.invoke(sample_state)
+    assert result["workflow_status"] == "failed"
+    assert result["error_message"] == "Requested entity 'employees' not found in schema."
+    assert result["sql_candidates"] == []
+    assert result["selected_sql"] is None

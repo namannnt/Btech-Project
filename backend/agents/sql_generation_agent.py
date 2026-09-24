@@ -35,12 +35,13 @@ INPUTS:
 GUIDELINES:
 1. **Accuracy First**: Generate syntactically correct SQL that answers the question precisely
 2. **Use Schema**: Only use tables and columns that exist in the provided schema
-3. **JOIN Correctly**: Use foreign key relationships to construct proper JOINs
-4. **Handle Aggregations**: Properly use GROUP BY with aggregate functions (COUNT, SUM, AVG, etc.)
-5. **Optimize Implicitly**: Avoid SELECT *, specify only needed columns
-6. **Dialect Compliance**: Follow {sql_dialect} syntax rules
+3. **Strict Grounding**: If the requested entity or attribute (e.g., employees, salaries) CANNOT be grounded in the provided schema, DO NOT generate an approximate substitute query. You MUST return an empty array for `candidates` and explain why in `reasoning`.
+4. **JOIN Correctly**: Use foreign key relationships to construct proper JOINs
+5. **Handle Aggregations**: Properly use GROUP BY with aggregate functions (COUNT, SUM, AVG, etc.)
+6. **Optimize Implicitly**: Avoid SELECT *, specify only needed columns
+7. **Dialect Compliance**: Follow {sql_dialect} syntax rules
 
-GENERATE 3 CANDIDATES:
+GENERATE 3 CANDIDATES (if groundable):
 Create 3 different valid SQL queries that could answer the question. They can vary in:
 - Different JOIN strategies
 - Different WHERE clause formulations
@@ -56,13 +57,14 @@ OUTPUT FORMAT (JSON):
     "candidates": [
         {{
             "sql": "SELECT ...",
+            "parameters": {{"param1": "value1"}},
             "confidence": 0.95,
             "explanation": "Uses INNER JOIN on customer_id..."
         }},
         ...
     ],
     "selected_index": 0,
-    "reasoning": "Why the selected candidate is best"
+    "reasoning": "Why the selected candidate is best (or why candidates is empty if ungroundable)"
 }}
 
 IMPORTANT:
@@ -190,7 +192,8 @@ class SQLGenerationAgent:
             fk_context = self._format_foreign_keys(state.get("foreign_keys", []))
             
             # Determine SQL dialect based on database type
-            db_url = settings.database_url
+            from backend.core.config import get_dynamic_db_url
+            db_url = get_dynamic_db_url(state.get("database_id"))
             if "postgresql" in db_url:
                 sql_dialect = "PostgreSQL"
             elif "mysql" in db_url:
@@ -213,6 +216,17 @@ class SQLGenerationAgent:
             
             # Update state with results
             candidates = result.get("candidates", [])
+            
+            if not candidates:
+                # Ungroundable request detected by LLM
+                reasoning = result.get("reasoning", "Requested information is not available in the current database schema.")
+                state["workflow_status"] = "failed"
+                state["error_message"] = reasoning
+                state["sql_candidates"] = []
+                state["selected_sql"] = None
+                add_to_processing_log(state, f"Agent 3 (SQL Generation): Ungroundable request. {reasoning}")
+                return state
+                
             candidates = self._post_process_candidates(candidates, sql_dialect)
             state["sql_candidates"] = candidates
             state["generation_metadata"] = {
@@ -226,10 +240,12 @@ class SQLGenerationAgent:
                 selected_idx = result.get("selected_index", 0)
                 if 0 <= selected_idx < len(candidates):
                     state["selected_sql"] = candidates[selected_idx]["sql"]
+                    state["sql_parameters"] = candidates[selected_idx].get("parameters", {})
                 else:
                     # Fallback to highest confidence
                     best_candidate = max(candidates, key=lambda c: c.get("confidence", 0))
                     state["selected_sql"] = best_candidate["sql"]
+                    state["sql_parameters"] = best_candidate.get("parameters", {})
             
             # Log the processing
             add_to_processing_log(
@@ -306,6 +322,7 @@ Return in the same JSON format as before."""
             
             if candidates:
                 state["selected_sql"] = candidates[0]["sql"]
+                state["sql_parameters"] = candidates[0].get("parameters", {})
             
             add_to_processing_log(
                 state,

@@ -364,6 +364,7 @@ class SQLValidationAgent:
             # Validation passed — update selected SQL to best valid candidate
             state["is_valid"] = True
             state["selected_sql"] = best_candidate["sql"]
+            state["sql_parameters"] = best_candidate.get("parameters", {})
             state["validation_errors"] = []
 
             validation_detail = {
@@ -379,6 +380,7 @@ class SQLValidationAgent:
                 "evaluated_candidates": len(scored_candidates),
                 "best_candidate": {
                     "sql": best_candidate["sql"],
+                    "parameters": best_candidate.get("parameters", {}),
                     "confidence": best_candidate.get("confidence", 0.0),
                     "score": best_candidate["_score"]
                 }

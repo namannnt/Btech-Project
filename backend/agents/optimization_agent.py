@@ -26,6 +26,7 @@ Your task is to optimize the generated SQL query for better performance.
 
 INPUTS:
 - Original SQL: {original_sql}
+- SQL Parameters: {sql_parameters}
 - Database Dialect: {sql_dialect}
 - Table Schemas: {table_schemas}
 
@@ -87,9 +88,10 @@ class QueryOptimizationAgent:
 
         self.json_parser = JsonOutputParser()
 
-    def _detect_dialect(self) -> str:
+    def _detect_dialect(self, database_id: Optional[str] = None) -> str:
         """Detect SQL dialect from configured database URL."""
-        db_url = settings.database_url
+        from backend.core.config import get_dynamic_db_url
+        db_url = get_dynamic_db_url(database_id)
         if "postgresql" in db_url:
             return "PostgreSQL"
         elif "mysql" in db_url:
@@ -169,6 +171,7 @@ class QueryOptimizationAgent:
                 chain = self.prompt_template | self.llm | self.json_parser
                 result = chain.invoke({
                     "original_sql": rule_optimized,
+                    "sql_parameters": str(state.get("sql_parameters", {})),
                     "sql_dialect": dialect,
                     "table_schemas": str(state.get("table_schemas", {}))
                 })
