@@ -1,0 +1,381 @@
+[
+  {
+    "id": "T01",
+    "question": "Show me the total number of records in each table.",
+    "sql": "SELECT n.nspname AS schema_name,\n       c.relname AS table_name,\n       c.reltuples::bigint AS estimated_row_count\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE c.relkind = 'r'               -- only ordinary tables\n  AND n.nspname NOT IN ('pg_catalog', 'information_schema');",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "<all tables in the database>"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT",
+        "COUNT"
+      ],
+      "question_type": "aggregation",
+      "confidence": 0.92,
+      "ambiguous_terms": [
+        "each table"
+      ],
+      "reasoning": "The user asks for the total number of records per table, which requires counting rows (COUNT(*)) for every table in the database. No specific tables, columns, or filter conditions are mentioned, so the intent is an aggregation across all tables. The phrase \"each table\" is ambiguous because the system must determine the list of tables dynamically (e.g., via information_schema)."
+    },
+    "error": "SQL generation failed: Invalid json output: \nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE ",
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T02",
+    "question": "Show me all customers from India.",
+    "sql": "SELECT c.*\nFROM customers AS c\nWHERE c.country = :country;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "customers",
+        "country"
+      ],
+      "conditions": [
+        {
+          "column": "country",
+          "operator": "=",
+          "value": "India"
+        }
+      ],
+      "operations": [
+        "SELECT"
+      ],
+      "question_type": "factual",
+      "confidence": 0.98,
+      "ambiguous_terms": [
+        "country column name (exact column may differ)"
+      ],
+      "reasoning": "The user asks for all customers originating from India. This translates to selecting all rows from the customers table where the country (or equivalent location field) equals 'India'. No aggregation, ordering, or joins are required."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T03",
+    "question": "Show me the top 5 customers by total spending.",
+    "sql": "SELECT c.customer_id,\n       c.name,\n       SUM(o.amount) AS total_spending\nFROM customers AS c\nJOIN orders AS o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spending DESC\nLIMIT 5;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "customers",
+        "orders",
+        "customers.customer_id",
+        "customers.name",
+        "orders.amount",
+        "orders.customer_id"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT",
+        "SUM",
+        "GROUP BY",
+        "ORDER BY",
+        "LIMIT"
+      ],
+      "question_type": "aggregation",
+      "confidence": 0.96,
+      "ambiguous_terms": [
+        "\"total spending\" (could refer to orders.amount, invoices.total, etc.)"
+      ],
+      "reasoning": "The request asks for the top 5 customers ranked by the sum of their spending. This requires joining the customers table with a transactional table (e.g., orders) to sum the amount per customer, grouping by customer, ordering the result descending by the summed amount, and limiting the output to 5 rows. No explicit filter conditions are provided."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T04",
+    "question": "Show me the 10 highest value transactions.",
+    "sql": "SELECT transaction_id, value\nFROM transactions\nORDER BY value DESC\nLIMIT 10;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "transactions",
+        "value"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT",
+        "ORDER BY",
+        "LIMIT"
+      ],
+      "question_type": "analytical",
+      "confidence": 0.93,
+      "ambiguous_terms": [
+        "value"
+      ],
+      "reasoning": "The user asks for the 10 highest\u2011value transactions. This implies selecting rows from the 'transactions' table, ordering by the numeric column that represents the transaction amount (named 'value' in a typical schema), and limiting the result to 10 rows. No explicit filter conditions are given. The term 'value' may refer to different monetary columns (e.g., amount, total_price), so it is marked as ambiguous."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T05",
+    "question": "Show me the names of customers and the orders they placed.",
+    "sql": "SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nJOIN Orders o ON o.customer_id = c.customer_id;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "Customers",
+        "Orders",
+        "Customers.customer_id",
+        "Customers.name",
+        "Orders.order_id",
+        "Orders.customer_id"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT",
+        "JOIN"
+      ],
+      "question_type": "factual",
+      "confidence": 0.85,
+      "ambiguous_terms": [
+        "orders (which columns to display)",
+        "names of customers (exact column name)"
+      ],
+      "reasoning": "The user asks for the names of customers together with the orders they placed. This implies a join between a Customers table and an Orders table on the customer_id foreign key. No explicit filters are given, so we simply select the customer name column and one or more order-related columns (e.g., order_id). The exact column names for customer name and order details are not specified, leading to some ambiguity."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T06",
+    "question": "Show me total sales by month.",
+    "sql": "SELECT strftime('%Y-%m', sale_date) AS month,\n       SUM(amount) AS total_sales\nFROM   sales\nGROUP BY strftime('%Y-%m', sale_date)\nORDER BY month;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [],
+      "conditions": [],
+      "operations": [
+        "SELECT"
+      ],
+      "question_type": "unknown",
+      "confidence": 0.0,
+      "error": "Invalid json output: {\n    \"entities\": [\n        \"sales\",               // assumed table containing transaction data\n        \"sale_amount\",         // column representing the monetary value of each sale\n        \"sale_date\"            // column representing the date of each sale (used to derive month)\n    ],\n    \"conditions\": [],\n    \"operations\": [\n        \"SELECT\",\n        \"SUM\",\n        \"GROUP BY\",\n        \"ORDER BY\"\n    ],\n    \"question_type\": \"aggregation\",\n    \"confidence\": 0.96,\n    \"ambiguous_terms\": [\n        \"sales\",   // could refer to a table or a column depending on schema\n        \"month\"    // not a column; month must be derived from a date column (e.g., sale_date)\n    ],\n    \"reasoning\": \"The user asks for the total sales amount broken down by month. This implies summing a monetary column (e.g., sale_amount) and grouping the result by the month component of a date column (e.g., sale_date). No explicit filters are provided, but an ORDER BY month is typical for readability. The exact table/column names may vary, so 'sales' and the date column are noted as ambiguous.\"\n}\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE "
+    },
+    "error": "Intent understanding failed: Invalid json output: {\n    \"entities\": [\n        \"sales\",               // assumed table containing transaction data\n        \"sale_amount\",         // column representing the monetary value of each sale\n        \"sale_date\"            // column representing the date of each sale (used to derive month)\n    ],\n    \"conditions\": [],\n    \"operations\": [\n        \"SELECT\",\n        \"SUM\",\n        \"GROUP BY\",\n        \"ORDER BY\"\n    ],\n    \"question_type\": \"aggregation\",\n    \"confidence\": 0.96,\n    \"ambiguous_terms\": [\n        \"sales\",   // could refer to a table or a column depending on schema\n        \"month\"    // not a column; month must be derived from a date column (e.g., sale_date)\n    ],\n    \"reasoning\": \"The user asks for the total sales amount broken down by month. This implies summing a monetary column (e.g., sale_amount) and grouping the result by the month component of a date column (e.g., sale_date). No explicit filters are provided, but an ORDER BY month is typical for readability. The exact table/column names may vary, so 'sales' and the date column are noted as ambiguous.\"\n}\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE ",
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T07",
+    "question": "Show me customers who spent more than 5000 and placed at least 3 orders.",
+    "sql": "SELECT c.customer_id, c.name\nFROM Customers c\nJOIN Orders o ON o.customer_id = c.customer_id\nGROUP BY c.customer_id, c.name\nHAVING SUM(o.order_amount) > 5000\n   AND COUNT(o.order_id) >= 3;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "Customers",
+        "Orders",
+        "order_amount",
+        "customer_id"
+      ],
+      "conditions": [
+        {
+          "column": "order_amount",
+          "operator": "SUM >",
+          "value": "5000"
+        },
+        {
+          "column": "order_id",
+          "operator": "COUNT >=",
+          "value": "3"
+        }
+      ],
+      "operations": [
+        "SELECT",
+        "JOIN",
+        "GROUP BY",
+        "HAVING"
+      ],
+      "question_type": "aggregation",
+      "confidence": 0.93,
+      "ambiguous_terms": [
+        "\"order_amount\" column name (could be total, amount, price, etc.)",
+        "\"Customers\" table name (could be customer, client, etc.)"
+      ],
+      "reasoning": "The user wants a list of customers whose total spending exceeds 5000 and who have placed at least three orders. This requires joining the Customers and Orders tables, grouping by customer, and applying HAVING conditions on SUM(order_amount) and COUNT(order_id). The request is an aggregation/analytical query."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T08",
+    "question": "Which products have been purchased by customers from India?",
+    "sql": "SELECT DISTINCT p.product_id, p.product_name\nFROM Products p\nINNER JOIN Orders o ON p.product_id = o.product_id\nINNER JOIN Customers c ON o.customer_id = c.customer_id\nWHERE c.country = :country;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "Products",
+        "Orders",
+        "Customers",
+        "product_id",
+        "product_name",
+        "customer_id",
+        "country"
+      ],
+      "conditions": [
+        {
+          "column": "country",
+          "operator": "=",
+          "value": "India"
+        }
+      ],
+      "operations": [
+        "SELECT",
+        "DISTINCT",
+        "JOIN"
+      ],
+      "question_type": "factual",
+      "confidence": 0.96,
+      "ambiguous_terms": [
+        "purchased",
+        "customers from India"
+      ],
+      "reasoning": "The user asks for a list of products that have been bought by customers whose location is India. This requires joining the Products table with the Orders (or Purchases) table and then with the Customers table to filter on Customers.country = 'India'. The result is a distinct set of product identifiers or names, so SELECT with DISTINCT (or GROUP BY) is needed. No aggregation or ordering is explicitly requested."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T09",
+    "question": "Show me the best customers.",
+    "sql": "SELECT c.customer_id,\n       c.customer_name,\n       SUM(o.order_total) AS total_spent\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.customer_name\nORDER BY total_spent DESC\nLIMIT :limit;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "Customers",
+        "Orders",
+        "OrderDetails",
+        "customer_id",
+        "customer_name",
+        "order_id",
+        "order_total",
+        "order_date"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT",
+        "SUM",
+        "GROUP BY",
+        "ORDER BY",
+        "LIMIT"
+      ],
+      "question_type": "comparative",
+      "confidence": 0.78,
+      "ambiguous_terms": [
+        "best"
+      ],
+      "reasoning": "The phrase \"best customers\" is not explicitly defined; it usually implies customers with the highest revenue or purchase frequency. I inferred that the query will need to aggregate sales (e.g., SUM(order_total) or COUNT(orders)) per customer, order the result descending, and possibly limit to the top N. No explicit filter conditions are provided, so none are listed. The ambiguity around what metric defines \"best\" is captured in the ambiguous_terms field."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T10",
+    "question": "Show me information about employees that does not exist in the database.",
+    "sql": "SELECT * FROM employees WHERE 0;",
+    "rows": 0,
+    "status": "completed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "employees"
+      ],
+      "conditions": [],
+      "operations": [
+        "SELECT"
+      ],
+      "question_type": "factual",
+      "confidence": 0.32,
+      "ambiguous_terms": [
+        "does not exist in the database"
+      ],
+      "reasoning": "The user asks for information about employees that do not exist in the database, which is logically contradictory. No specific columns or filters are mentioned, so the only identifiable entity is the 'employees' table and the operation is a SELECT. The phrase 'does not exist' is ambiguous\u2014it could imply a NOT EXISTS sub\u2011query against another table, but no such table is referenced. Hence the interpretation is uncertain and confidence is low."
+    },
+    "error": null,
+    "security_passed": true,
+    "data": []
+  },
+  {
+    "id": "T11",
+    "question": "Delete all customers.",
+    "sql": "DELETE FROM customers;",
+    "rows": 0,
+    "status": "failed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "customers"
+      ],
+      "conditions": [],
+      "operations": [
+        "DELETE"
+      ],
+      "question_type": "modification",
+      "confidence": 0.99,
+      "ambiguous_terms": [],
+      "reasoning": "The user explicitly requests to remove every record from the customers table. This translates to a DELETE statement without a WHERE clause, targeting the 'customers' table. No additional columns, values, or filters are mentioned."
+    },
+    "error": "Security check failed: Operation 'DELETE' is not permitted for role 'user'. Allowed operations: ['SELECT']",
+    "security_passed": false,
+    "data": []
+  },
+  {
+    "id": "T12",
+    "question": "Update every customer's balance to 0.",
+    "sql": "UPDATE customers SET balance = 0;",
+    "rows": 0,
+    "status": "failed",
+    "tables_retrieved": [],
+    "intent": {
+      "entities": [
+        "customers",
+        "balance"
+      ],
+      "conditions": [],
+      "operations": [
+        "UPDATE",
+        "SET"
+      ],
+      "question_type": "modification",
+      "confidence": 0.99,
+      "ambiguous_terms": [
+        "customers",
+        "balance"
+      ],
+      "reasoning": "The user wants to change the 'balance' column for every row in the customers table to the constant value 0. No WHERE clause is specified, so the operation applies to all records. This maps to an UPDATE statement with a SET clause."
+    },
+    "error": "Security check failed: Operation 'UPDATE' is not permitted for role 'user'. Allowed operations: ['SELECT']",
+    "security_passed": false,
+    "data": []
+  }
+]

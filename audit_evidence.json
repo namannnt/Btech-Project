@@ -1,0 +1,978 @@
+{
+  "evidence": [
+    {
+      "id": "T01",
+      "query": "Show me the total number of records in each table.",
+      "intent_output": {
+        "entities": [
+          "information_schema.tables",
+          "table_name",
+          "table_rows"
+        ],
+        "conditions": [],
+        "operations": [
+          "SELECT",
+          "COUNT",
+          "GROUP BY"
+        ],
+        "question_type": "aggregation",
+        "confidence": 0.92,
+        "ambiguous_terms": [
+          "each table"
+        ],
+        "reasoning": "The user asks for the total number of records per table, which requires counting rows for every table in the database. This translates to a SELECT with COUNT(*) grouped by table name, typically using the information_schema.tables metadata. No explicit filter conditions are provided, but the phrase \"each table\" is ambiguous because it does not specify a subset of tables."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT table_name, SUM(row_count) AS total_rows FROM (SELECT table_name, table_rows AS row_count FROM information_schema.tables WHERE table_schema = 'main') GROUP BY table_name;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 2,
+        "best_candidate": {
+          "sql": "SELECT table_name, SUM(row_count) AS total_rows FROM (SELECT table_name, table_rows AS row_count FROM information_schema.tables WHERE table_schema = 'main') GROUP BY table_name;",
+          "confidence": 0.8,
+          "score": 0.98
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:19:52.440867",
+        "role": "user",
+        "sql_preview": "SELECT table_name, SUM(row_count) AS total_rows FROM (SELECT table_name, table_rows AS row_count FROM information_schema.tables WHERE table_schema = 'main') GROUP BY table_name;",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT table_name, SUM(row_count) AS total_rows FROM (SELECT table_name, table_rows AS row_count FROM information_schema.tables WHERE table_schema = 'main') GROUP BY table_name;",
+        "optimized_sql": "SELECT table_name, table_rows AS total_rows FROM information_schema.tables WHERE table_schema = 'main';",
+        "optimizations_applied": [
+          "Removed unnecessary subquery and flattened the query",
+          "Eliminated redundant SUM aggregation and GROUP BY because each table appears only once",
+          "Simplified column selection to only required columns"
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlite3.OperationalError) no such table: information_schema.tables\n[SQL: SELECT table_name, table_rows AS total_rows FROM information_schema.tables WHERE table_schema = 'main';]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query looks into the database\u2019s system catalog (information_schema.tables) to list every table that belongs to the schema named 'main', and it pulls two pieces of information for each: the table\u2019s name and the number of rows it contains. In plain terms, it\u2019s asking the database: \"Give me a list of all tables in the main part of the database and how many records each one holds.\"",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me the total number of records in each table.",
+        "Intent understood: aggregation question with 3 entities and 3 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 2 SQL candidates. Selected: SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema = 'main';...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.98) from 2 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 3 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlite3.OperationalError) no such table: information_schema.tables\n[SQL: SELECT table_name, table_rows AS total_rows FROM information_schema.tables WHERE table_schema = 'main';]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T02",
+      "query": "Show me all customers from India.",
+      "intent_output": {
+        "entities": [
+          "customers",
+          "India"
+        ],
+        "conditions": [
+          {
+            "column": "country",
+            "operator": "=",
+            "value": "India"
+          }
+        ],
+        "operations": [
+          "SELECT"
+        ],
+        "question_type": "factual",
+        "confidence": 0.96,
+        "ambiguous_terms": [
+          "country column name (could be country, nation, location, etc.)"
+        ],
+        "reasoning": "The user wants every row from the customers table where the customer's country is India. This translates to a simple SELECT with an equality filter on the country column. No aggregation, ordering, or joins are required."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT customer_id, name, country\nFROM customers\nWHERE country = :country;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT customer_id, name, country\nFROM customers\nWHERE country = :country;",
+          "confidence": 0.94,
+          "score": 0.9939999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:19:58.317497",
+        "role": "user",
+        "sql_preview": "SELECT customer_id, name, country\nFROM customers\nWHERE country = :country;",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT customer_id, name, country\nFROM customers\nWHERE country = :country;",
+        "optimized_sql": "SELECT customer_id, name, country FROM customers WHERE country = :country;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Verified that the query already selects specific columns (no SELECT *).",
+          "Predicate is already pushed down to the base table.",
+          "No redundant DISTINCT, ORDER BY, or unnecessary subqueries present."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'country'\n[SQL: SELECT customer_id, name, country FROM customers WHERE country = ?;]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query looks through the customers table and pulls out the customer ID, name, and country for any customer whose country matches the value you give it (in this case, India).",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me all customers from India.",
+        "Intent understood: factual question with 2 entities and 1 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT customer_id, name, country\nFROM customers\nWHERE country = :country;...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.99) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'country'\n[SQL: SELECT customer_id, name, country FROM customers WHERE country = ?;]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T03",
+      "query": "Show me the top 5 customers by total spending.",
+      "intent_output": {
+        "entities": [
+          "customers",
+          "orders",
+          "order_total"
+        ],
+        "conditions": [
+          {
+            "column": "total_spending",
+            "operator": "ORDER BY",
+            "value": "DESC"
+          },
+          {
+            "column": "LIMIT",
+            "operator": "=",
+            "value": "5"
+          }
+        ],
+        "operations": [
+          "SELECT",
+          "SUM",
+          "GROUP BY",
+          "ORDER BY",
+          "LIMIT"
+        ],
+        "question_type": "aggregation",
+        "confidence": 0.85,
+        "ambiguous_terms": [
+          "\"total spending\" (could be a pre\u2011computed column or the sum of order amounts)",
+          "\"customers\" (exact table name may vary, e.g., customer, customers, client)"
+        ],
+        "reasoning": "The user wants the five customers with the highest overall expenditure. This requires summing a monetary column (e.g., order_total) per customer, grouping by the customer identifier, ordering the result descending by that sum, and limiting the output to five rows. No explicit filter conditions are given."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT c.customer_id,\n       c.name,\n       SUM(o.order_total) AS total_spending\nFROM   customers c\nJOIN   orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spending DESC\nLIMIT 5;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT c.customer_id,\n       c.name,\n       SUM(o.order_total) AS total_spending\nFROM   customers c\nJOIN   orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spending DESC\nLIMIT 5;",
+          "confidence": 0.93,
+          "score": 0.9929999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:20:04.310227",
+        "role": "user",
+        "sql_preview": "SELECT c.customer_id,\n       c.name,\n       SUM(o.order_total) AS total_spending\nFROM   customers c\nJOIN   orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spend...",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT c.customer_id,\n       c.name,\n       SUM(o.order_total) AS total_spending\nFROM   customers c\nJOIN   orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spending DESC\nLIMIT 5;",
+        "optimized_sql": "SELECT c.customer_id,\n       c.name,\n       o_sum.total_spending\nFROM (\n        SELECT customer_id,\n               SUM(order_total) AS total_spending\n        FROM orders\n        GROUP BY customer_id\n     ) AS o_sum\nJOIN customers AS c ON c.customer_id = o_sum.customer_id\nORDER BY o_sum.total_spending DESC\nLIMIT 5;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Pre\u2011aggregate the orders table in a derived subquery before joining to customers, reducing the amount of data processed in the join.",
+          "Removed the redundant column c.name from the GROUP BY clause (assuming name is functionally dependent on customer_id, which is typical for a primary\u2011key relationship).",
+          "Kept explicit column list (no SELECT *)."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlite3.OperationalError) no such column: order_total\n[SQL: SELECT c.customer_id,\n       c.name,\n       o_sum.total_spending\nFROM (\n        SELECT customer_id,\n               SUM(order_total) AS total_spending\n        FROM orders\n        GROUP BY customer_id\n     ) AS o_sum\nJOIN customers AS c ON c.customer_id = o_sum.customer_id\nORDER BY o_sum.total_spending DESC\nLIMIT 5;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query first adds up the total amount each customer has spent by looking at all of their orders. It then pairs that total with the customer\u2019s name from the customers table. Finally, it orders the customers from highest to lowest spending and keeps only the top five.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me the top 5 customers by total spending.",
+        "Intent understood: aggregation question with 3 entities and 5 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT c.customer_id,\n       c.name,\n       SUM(o.order_total) AS total_spending\nFROM   customers c\n...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.99) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlite3.OperationalError) no such column: order_total\n[SQL: SELECT c.customer_id,\n       c.name,\n       o_sum.total_spending\nFROM (\n        SELECT customer_id,\n               SUM(order_total) AS total_spending\n        FROM orders\n        GROUP BY customer_id\n     ) AS o_sum\nJOIN customers AS c ON c.customer_id = o_sum.customer_id\nORDER BY o_sum.total_spending DESC\nLIMIT 5;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T04",
+      "query": "Show me the 10 highest value transactions.",
+      "intent_output": {
+        "entities": [
+          "transactions",
+          "value"
+        ],
+        "conditions": [],
+        "operations": [
+          "SELECT",
+          "ORDER BY",
+          "LIMIT"
+        ],
+        "question_type": "analytical",
+        "confidence": 0.92,
+        "ambiguous_terms": [
+          "value"
+        ],
+        "reasoning": "The user asks for the 10 highest value transactions. This implies selecting rows from a 'transactions' table, ordering by a monetary column (commonly named 'value' or 'amount') in descending order, and limiting the result to 10 rows. No explicit filter conditions are given. The term 'value' may map to different column names in the schema, so it is marked as ambiguous."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT transaction_id, COALESCE(value, amount) AS transaction_value FROM transactions ORDER BY transaction_value DESC LIMIT 10;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT transaction_id, COALESCE(value, amount) AS transaction_value FROM transactions ORDER BY transaction_value DESC LIMIT 10;",
+          "confidence": 0.8,
+          "score": 0.98
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:20:20.045825",
+        "role": "user",
+        "sql_preview": "SELECT transaction_id, COALESCE(value, amount) AS transaction_value FROM transactions ORDER BY transaction_value DESC LIMIT 10;",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT transaction_id, COALESCE(value, amount) AS transaction_value FROM transactions ORDER BY transaction_value DESC LIMIT 10;",
+        "optimized_sql": "SELECT transaction_id, COALESCE(value, amount) AS transaction_value\nFROM transactions\nORDER BY COALESCE(value, amount) DESC\nLIMIT 10;",
+        "optimizations_applied": [
+          "Rewrote ORDER BY to use the same expression as the SELECT alias, allowing SQLite to use an expression index.",
+          "Ensured the query selects only needed columns (already specific)."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlite3.OperationalError) no such column: value\n[SQL: SELECT transaction_id, COALESCE(value, amount) AS transaction_value\nFROM transactions\nORDER BY COALESCE(value, amount) DESC\nLIMIT 10;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query looks at the table that stores all transactions. For each transaction it picks the transaction ID and the amount of money involved. It uses the column named 'value' if that column has data; if not, it falls back to the 'amount' column. It then sorts all transactions from the largest amount to the smallest and keeps only the top ten rows.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me the 10 highest value transactions.",
+        "Intent understood: analytical question with 2 entities and 3 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT transaction_id, COALESCE(value, amount) AS transaction_value FROM transactions ORDER BY trans...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.98) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 2 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlite3.OperationalError) no such column: value\n[SQL: SELECT transaction_id, COALESCE(value, amount) AS transaction_value\nFROM transactions\nORDER BY COALESCE(value, amount) DESC\nLIMIT 10;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T05",
+      "query": "Show me the names of customers and the orders they placed.",
+      "intent_output": {
+        "entities": [
+          "Customers",
+          "Orders",
+          "Customers.customer_id",
+          "Customers.name",
+          "Orders.order_id",
+          "Orders.customer_id"
+        ],
+        "conditions": [
+          {
+            "column": "Customers.customer_id",
+            "operator": "=",
+            "value": "Orders.customer_id"
+          }
+        ],
+        "operations": [
+          "SELECT",
+          "JOIN"
+        ],
+        "question_type": "factual",
+        "confidence": 0.93,
+        "ambiguous_terms": [
+          "order details (which columns of Orders to display)",
+          "whether to include only recent orders or all orders"
+        ],
+        "reasoning": "The user asks for the names of customers together with the orders they placed. This implies a join between the Customers and Orders tables on the foreign\u2011key relationship (Customers.customer_id = Orders.customer_id). No explicit filters are given, so the query will retrieve all matching rows. The exact columns from Orders to show are not specified, making that part ambiguous."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nINNER JOIN Orders o ON c.customer_id = o.customer_id;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nINNER JOIN Orders o ON c.customer_id = o.customer_id;",
+          "confidence": 0.96,
+          "score": 0.9959999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:20:41.253208",
+        "role": "user",
+        "sql_preview": "SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nINNER JOIN Orders o ON c.customer_id = o.customer_id;",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nINNER JOIN Orders o ON c.customer_id = o.customer_id;",
+        "optimized_sql": "SELECT c.name AS customer_name, o.order_id\nFROM Customers AS c\nINNER JOIN Orders AS o ON c.customer_id = o.customer_id;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Verified that the query already selects specific columns (no SELECT *).",
+          "Confirmed there are no unnecessary DISTINCT, ORDER BY, or subqueries to remove.",
+          "Ensured the join uses the primary/foreign key relationship directly."
+        ]
+      },
+      "execution_result": {
+        "success": true,
+        "error": null
+      },
+      "row_count": 54,
+      "explanation_output": "The query pulls together two tables: the list of customers and the list of orders. It matches each customer to the orders that belong to them by using the customer ID that appears in both tables. The result shows the customer's name next to every order ID they have placed.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me the names of customers and the orders they placed.",
+        "Intent understood: factual question with 6 entities and 2 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT c.name AS customer_name, o.order_id\nFROM Customers c\nINNER JOIN Orders o ON c.customer_id = o...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=1.00) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): 54 rows returned in 0.48ms",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T06",
+      "query": "Show me total sales by month.",
+      "intent_output": {
+        "entities": [],
+        "conditions": [],
+        "operations": [
+          "SELECT"
+        ],
+        "question_type": "unknown",
+        "confidence": 0.0,
+        "error": "Invalid json output: {\n    \"entities\": [\n        \"sales\",               // assumed table containing transaction records\n        \"sale_amount\",         // column representing the monetary value of each sale\n        \"sale_date\"            // column representing the date of each sale\n    ],\n    \"conditions\": [],\n    \"operations\": [\n        \"SELECT\",\n        \"SUM\",\n        \"GROUP BY\",\n        \"ORDER BY\"\n    ],\n    \"question_type\": \"aggregation\",\n    \"confidence\": 0.78,\n    \"ambiguous_terms\": [\n        \"sales (table name vs. concept)\",\n        \"sale_amount (exact column name may differ)\",\n        \"sale_date (which date column to use for month extraction)\"\n    ],\n    \"reasoning\": \"The user asks for the total sales broken down by month, which implies summing a monetary column (e.g., sale_amount) and grouping the results by the month component of a date column (e.g., sale_date). No explicit filters are provided, so no WHERE conditions are needed. The request is an aggregation query, requiring SELECT with SUM, GROUP BY month, and typically ORDER BY month for readability. The exact table and column names are inferred from common schemas, hence the ambiguity noted.\"\n}\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE "
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT strftime('%Y-%m', sale_date) AS month,\n       SUM(sale_amount) AS total_sales\nFROM sales\nGROUP BY strftime('%Y-%m', sale_date)\nORDER BY month;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 1,
+        "best_candidate": {
+          "sql": "SELECT strftime('%Y-%m', sale_date) AS month,\n       SUM(sale_amount) AS total_sales\nFROM sales\nGROUP BY strftime('%Y-%m', sale_date)\nORDER BY month;",
+          "confidence": 0.0,
+          "score": 0.8999999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:21:05.197888",
+        "role": "user",
+        "sql_preview": "SELECT strftime('%Y-%m', sale_date) AS month,\n       SUM(sale_amount) AS total_sales\nFROM sales\nGROUP BY strftime('%Y-%m', sale_date)\nORDER BY month;",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT strftime('%Y-%m', sale_date) AS month,\n       SUM(sale_amount) AS total_sales\nFROM sales\nGROUP BY strftime('%Y-%m', sale_date)\nORDER BY month;",
+        "optimized_sql": "WITH sales_month AS (\n    SELECT strftime('%Y-%m', sale_date) AS month, sale_amount\n    FROM sales\n)\nSELECT month,\n       SUM(sale_amount) AS total_sales\nFROM sales_month\nGROUP BY month\nORDER BY month;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Computed the month expression once using a CTE to avoid evaluating strftime('%Y-%m', sale_date) twice (once in SELECT and once in GROUP BY).",
+          "Replaced the repeated function call with a derived column (month) that is reused in GROUP BY and ORDER BY.",
+          "Kept the ORDER BY because SQLite does not guarantee result order from GROUP BY alone."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlite3.OperationalError) no such column: sale_amount\n[SQL: WITH sales_month AS (\n    SELECT strftime('%Y-%m', sale_date) AS month, sale_amount\n    FROM sales\n)\nSELECT month,\n       SUM(sale_amount) AS total_sales\nFROM sales_month\nGROUP BY month\nORDER BY month;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query first creates a temporary list of each sale\u2019s month (in the form YYYY\u2011MM) and the amount sold. It then adds up all the sale amounts for each month, giving a total sales figure per month, and finally lists those totals in chronological order.",
+      "retry_count": 1,
+      "processing_log": [
+        "Initialized pipeline for question: Show me total sales by month.",
+        "ERROR: Intent understanding failed: Invalid json output: {\n    \"entities\": [\n        \"sales\",               // assumed table containing transaction records\n        \"sale_amount\",         // column representing the monetary value of each sale\n        \"sale_date\"            // column representing the date of each sale\n    ],\n    \"conditions\": [],\n    \"operations\": [\n        \"SELECT\",\n        \"SUM\",\n        \"GROUP BY\",\n        \"ORDER BY\"\n    ],\n    \"question_type\": \"aggregation\",\n    \"confidence\": 0.78,\n    \"ambiguous_terms\": [\n        \"sales (table name vs. concept)\",\n        \"sale_amount (exact column name may differ)\",\n        \"sale_date (which date column to use for month extraction)\"\n    ],\n    \"reasoning\": \"The user asks for the total sales broken down by month, which implies summing a monetary column (e.g., sale_amount) and grouping the results by the month component of a date column (e.g., sale_date). No explicit filters are provided, so no WHERE conditions are needed. The request is an aggregation query, requiring SELECT with SUM, GROUP BY month, and typically ORDER BY month for readability. The exact table and column names are inferred from common schemas, hence the ambiguity noted.\"\n}\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE ",
+        "Retrieved 0 relevant tables: ",
+        "No SQL generated",
+        "ERROR: Validation \u2014 no SQL candidates to evaluate",
+        "Retry #1: Generated 1 new candidates",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.90) from 1 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlite3.OperationalError) no such column: sale_amount\n[SQL: WITH sales_month AS (\n    SELECT strftime('%Y-%m', sale_date) AS month, sale_amount\n    FROM sales\n)\nSELECT month,\n       SUM(sale_amount) AS total_sales\nFROM sales_month\nGROUP BY month\nORDER BY month;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T07",
+      "query": "Show me customers who spent more than 5000 and placed at least 3 orders.",
+      "intent_output": {
+        "entities": [
+          "customers",
+          "orders",
+          "customer_id",
+          "order_id",
+          "total_amount"
+        ],
+        "conditions": [
+          {
+            "column": "total_amount",
+            "operator": ">",
+            "value": "5000",
+            "aggregation": "SUM"
+          },
+          {
+            "column": "order_id",
+            "operator": ">=",
+            "value": "3",
+            "aggregation": "COUNT"
+          }
+        ],
+        "operations": [
+          "SELECT",
+          "SUM",
+          "COUNT",
+          "GROUP BY",
+          "HAVING"
+        ],
+        "question_type": "aggregation",
+        "confidence": 0.96,
+        "ambiguous_terms": [
+          "total_amount (could be named amount, price, order_total, etc.)"
+        ],
+        "reasoning": "The user wants a list of customers whose total spending exceeds 5000 and who have placed at least three orders. This requires joining the Customers and Orders tables, grouping by customer, computing SUM(total_amount) and COUNT(order_id), and filtering with HAVING conditions. The exact column name for the order amount is not certain, so it is noted as ambiguous."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_spent, COUNT(o.order_id) AS order_count\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nHAVING SUM(o.total_amount) > 5000 AND COUNT(o.order_id) >= 3;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_spent, COUNT(o.order_id) AS order_count\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nHAVING SUM(o.total_amount) > 5000 AND COUNT(o.order_id) >= 3;",
+          "confidence": 0.96,
+          "score": 0.9959999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:21:29.856548",
+        "role": "user",
+        "sql_preview": "SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_spent, COUNT(o.order_id) AS order_count\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nHAVING...",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_spent, COUNT(o.order_id) AS order_count\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nHAVING SUM(o.total_amount) > 5000 AND COUNT(o.order_id) >= 3;",
+        "optimized_sql": "SELECT c.customer_id,\n       c.name,\n       o.total_spent,\n       o.order_count\nFROM customers AS c\nJOIN (\n    SELECT customer_id,\n           SUM(total_amount) AS total_spent,\n           COUNT(order_id)   AS order_count\n    FROM orders\n    GROUP BY customer_id\n    HAVING SUM(total_amount) > 5000\n       AND COUNT(order_id) >= 3\n) AS o ON c.customer_id = o.customer_id;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Moved aggregation on orders into a derived table (subquery) before the join, reducing the number of rows processed in the join.",
+          "Removed the redundant GROUP BY column 'c.name' from the outer query (name is functionally dependent on customer_id).",
+          "Kept explicit column list (no SELECT *).",
+          "Ensured predicate (HAVING) stays with the aggregation where it belongs."
+        ]
+      },
+      "execution_result": {
+        "success": true,
+        "error": null
+      },
+      "row_count": 7,
+      "explanation_output": "The query first looks at all orders and adds up how much each customer spent and counts how many orders they made. It keeps only those customers who spent more than $5,000 and who have placed at least three orders. Then it joins that list back to the customers table to get each customer's name. The final result shows each qualifying customer\u2019s ID, name, total amount spent, and number of orders.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me customers who spent more than 5000 and placed at least 3 orders.",
+        "Intent understood: aggregation question with 5 entities and 5 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_spent, COUNT(o.order_id) AS order_count\nF...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=1.00) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 5 optimization(s)",
+        "Agent 7 (Execution): 7 rows returned in 0.59ms",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T08",
+      "query": "Which products have been purchased by customers from India?",
+      "intent_output": {
+        "entities": [
+          "Products.product_id",
+          "Products.product_name",
+          "Customers.customer_id",
+          "Customers.country",
+          "Orders.order_id",
+          "Orders.customer_id",
+          "OrderItems.order_id",
+          "OrderItems.product_id"
+        ],
+        "conditions": [
+          {
+            "column": "Customers.country",
+            "operator": "=",
+            "value": "India"
+          }
+        ],
+        "operations": [
+          "SELECT",
+          "DISTINCT",
+          "JOIN"
+        ],
+        "question_type": "factual",
+        "confidence": 0.94,
+        "ambiguous_terms": [
+          "\"purchased\" (could map to Orders, OrderItems, or a Purchases table)",
+          "\"products\" (could refer to product_id or product_name)"
+        ],
+        "reasoning": "The user asks for a list of products that have been bought by customers whose country is India. This requires joining the Customers table (to filter by country = 'India') with the Orders/OrderItems (or Purchases) tables to link customers to the products they bought, and then selecting distinct product identifiers or names. No aggregation beyond distinctness is needed, so the operation set includes SELECT, DISTINCT, and JOIN. The question is a factual request for a list."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT DISTINCT p.product_id, p.product_name\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.customer_id\nJOIN OrderItems oi ON o.order_id = oi.order_id\nJOIN Products p ON oi.product_id = p.product_id\nWHERE c.country = :country;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT DISTINCT p.product_id, p.product_name\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.customer_id\nJOIN OrderItems oi ON o.order_id = oi.order_id\nJOIN Products p ON oi.product_id = p.product_id\nWHERE c.country = :country;",
+          "confidence": 0.96,
+          "score": 0.9959999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:22:00.526871",
+        "role": "user",
+        "sql_preview": "SELECT DISTINCT p.product_id, p.product_name\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.customer_id\nJOIN OrderItems oi ON o.order_id = oi.order_id\nJOIN Products p ON oi.product_id = p.product...",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT DISTINCT p.product_id, p.product_name\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.customer_id\nJOIN OrderItems oi ON o.order_id = oi.order_id\nJOIN Products p ON oi.product_id = p.product_id\nWHERE c.country = :country;",
+        "optimized_sql": "SELECT p.product_id, p.product_name\nFROM Products p\nWHERE EXISTS (\n    SELECT 1\n    FROM OrderItems oi\n    JOIN Orders o ON oi.order_id = o.order_id\n    JOIN Customers c ON o.customer_id = c.customer_id\n    WHERE c.country = :country\n      AND oi.product_id = p.product_id\n);",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Replaced multi\u2011table INNER JOIN with a semi\u2011join using EXISTS to eliminate the need for DISTINCT",
+          "Pushed the country filter down to the Customers table inside the subquery (predicate pushdown)",
+          "Removed unnecessary DISTINCT by using EXISTS, which returns each product at most once",
+          "Kept column list explicit (no SELECT *)"
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'country'\n[SQL: SELECT p.product_id, p.product_name\nFROM Products p\nWHERE EXISTS (\n    SELECT 1\n    FROM OrderItems oi\n    JOIN Orders o ON oi.order_id = o.order_id\n    JOIN Customers c ON o.customer_id = c.customer_id\n    WHERE c.country = ?\n      AND oi.product_id = p.product_id\n);]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query looks through the product list and keeps only those products that have been bought by at least one customer who lives in India. It does this by checking if there is any order item that matches a product, that order belongs to a customer, and that customer\u2019s country is India.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Which products have been purchased by customers from India?",
+        "Intent understood: factual question with 8 entities and 3 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT DISTINCT p.product_id, p.product_name\nFROM Customers c\nJOIN Orders o ON c.customer_id = o.cus...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=1.00) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 5 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'country'\n[SQL: SELECT p.product_id, p.product_name\nFROM Products p\nWHERE EXISTS (\n    SELECT 1\n    FROM OrderItems oi\n    JOIN Orders o ON oi.order_id = o.order_id\n    JOIN Customers c ON o.customer_id = c.customer_id\n    WHERE c.country = ?\n      AND oi.product_id = p.product_id\n);]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T09",
+      "query": "Show me the best customers.",
+      "intent_output": {
+        "entities": [
+          "customers",
+          "orders",
+          "order_items"
+        ],
+        "conditions": [],
+        "operations": [
+          "SELECT",
+          "JOIN",
+          "SUM",
+          "GROUP BY",
+          "ORDER BY",
+          "LIMIT"
+        ],
+        "question_type": "analytical",
+        "confidence": 0.73,
+        "ambiguous_terms": [
+          "best"
+        ],
+        "reasoning": "The request asks for the \"best customers\" without specifying the metric. In typical sales databases this is interpreted as customers with the highest total spend (SUM of order amounts) or highest order count. Therefore the query will need to join customers with orders (and possibly order_items), aggregate revenue per customer, order the result descending, and limit to the top N. Because the exact definition of \"best\" is unclear, I flagged it as ambiguous and set a moderate confidence level."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT c.customer_id, c.name, COALESCE(SUM(o.total_amount), 0) AS total_spent\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spent DESC\nLIMIT :limit;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT c.customer_id, c.name, COALESCE(SUM(o.total_amount), 0) AS total_spent\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spent DESC\nLIMIT :limit;",
+          "confidence": 0.85,
+          "score": 0.9849999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:22:28.624254",
+        "role": "user",
+        "sql_preview": "SELECT c.customer_id, c.name, COALESCE(SUM(o.total_amount), 0) AS total_spent\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spent D...",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT c.customer_id, c.name, COALESCE(SUM(o.total_amount), 0) AS total_spent\nFROM customers c\nLEFT JOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_spent DESC\nLIMIT :limit;",
+        "optimized_sql": "SELECT c.customer_id,\n       c.name,\n       COALESCE(o.total_spent, 0) AS total_spent\nFROM customers c\nLEFT JOIN (\n    SELECT customer_id,\n           SUM(total_amount) AS total_spent\n    FROM orders\n    GROUP BY customer_id\n) o ON c.customer_id = o.customer_id\nORDER BY total_spent DESC\nLIMIT :LIMIT;",
+        "optimizations_applied": [
+          "Collapsed redundant whitespace",
+          "Moved the aggregation (SUM) on orders into a derived subquery, so the GROUP BY is performed once on the orders table before the join.",
+          "Reduced the size of the join by joining customers to a pre\u2011aggregated result set instead of joining to every order row.",
+          "Replaced COALESCE(SUM(...),0) with COALESCE(o.total_spent,0) after the subquery, preserving the same semantics."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'LIMIT'\n[SQL: SELECT c.customer_id,\n       c.name,\n       COALESCE(o.total_spent, 0) AS total_spent\nFROM customers c\nLEFT JOIN (\n    SELECT customer_id,\n           SUM(total_amount) AS total_spent\n    FROM orders\n    GROUP BY customer_id\n) o ON c.customer_id = o.customer_id\nORDER BY total_spent DESC\nLIMIT ?;]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query looks at every customer in the system and adds up how much each one has spent on orders. It then lists the customers in order from the highest spender to the lowest, showing only the top ones as requested by the limit parameter.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me the best customers.",
+        "Intent understood: analytical question with 3 entities and 6 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT c.customer_id, c.name, COALESCE(SUM(o.total_amount), 0) AS total_spent\nFROM customers c\nLEFT ...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.98) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlalchemy.exc.InvalidRequestError) A value is required for bind parameter 'LIMIT'\n[SQL: SELECT c.customer_id,\n       c.name,\n       COALESCE(o.total_spent, 0) AS total_spent\nFROM customers c\nLEFT JOIN (\n    SELECT customer_id,\n           SUM(total_amount) AS total_spent\n    FROM orders\n    GROUP BY customer_id\n) o ON c.customer_id = o.customer_id\nORDER BY total_spent DESC\nLIMIT ?;]\n(Background on this error at: https://sqlalche.me/e/20/cd3x)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T10",
+      "query": "Show me information about employees that does not exist in the database.",
+      "intent_output": {
+        "entities": [
+          "employees"
+        ],
+        "conditions": [
+          {
+            "column": "employees",
+            "operator": "NOT EXISTS",
+            "value": "any record"
+          }
+        ],
+        "operations": [
+          "SELECT"
+        ],
+        "question_type": "factual",
+        "confidence": 0.42,
+        "ambiguous_terms": [
+          "does not exist"
+        ],
+        "reasoning": "The user asks for information about employees that do not exist in the database, which is contradictory. The only clear entity is the 'employees' table. I interpreted the phrase 'does not exist' as a NOT EXISTS condition, but without a reference table or criteria it is ambiguous, leading to low confidence."
+      },
+      "schema_tables": [],
+      "sql_generated": "SELECT * FROM employees WHERE NOT EXISTS (SELECT 1);",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)",
+          "ADVISORY: SQL uses SELECT * \u2014 consider specifying columns"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "SELECT * FROM employees WHERE NOT EXISTS (SELECT 1);",
+          "confidence": 0.3,
+          "score": 0.9299999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:22:55.603600",
+        "role": "user",
+        "sql_preview": "SELECT * FROM employees WHERE NOT EXISTS (SELECT 1);",
+        "decision": "APPROVED",
+        "violations": [],
+        "warnings": []
+      },
+      "security_passed": true,
+      "optimization_result": {
+        "original_sql": "SELECT * FROM employees WHERE NOT EXISTS (SELECT 1);",
+        "optimized_sql": "SELECT * FROM employees WHERE 0;",
+        "optimizations_applied": [
+          "Flagged: Consider replacing SELECT * with specific columns",
+          "Identified that NOT EXISTS (SELECT 1) is always FALSE because the subquery returns a row unconditionally.",
+          "Replaced the subquery with a constant FALSE predicate (WHERE 0) to eliminate the subquery execution.",
+          "Preserved the original semantics (the query returns no rows)."
+        ]
+      },
+      "execution_result": {
+        "success": false,
+        "error": "(sqlite3.OperationalError) no such table: employees\n[SQL: SELECT * FROM employees WHERE 0;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      },
+      "row_count": 0,
+      "explanation_output": "The query asks the database to return every column for every employee, but it includes a condition that is always false (the number 0). Because that condition can never be true, the database will never return any rows.",
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Show me information about employees that does not exist in the database.",
+        "Intent understood: factual question with 1 entities and 1 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: SELECT * FROM employees WHERE NOT EXISTS (SELECT 1);...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=0.93) from 3 candidates",
+        "Agent 5 (Security): APPROVED for role='user'",
+        "Agent 6 (Optimization): Applied 4 optimization(s)",
+        "Agent 7 (Execution): FAILED \u2014 (sqlite3.OperationalError) no such table: employees\n[SQL: SELECT * FROM employees WHERE 0;]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "Agent 8 (Explanation): Explanation generated"
+      ]
+    },
+    {
+      "id": "T11",
+      "query": "Delete all customers.",
+      "intent_output": {
+        "entities": [
+          "customers"
+        ],
+        "conditions": [],
+        "operations": [
+          "DELETE"
+        ],
+        "question_type": "data_modification",
+        "confidence": 0.98,
+        "ambiguous_terms": [],
+        "reasoning": "The user explicitly requests to remove every record from the 'customers' table. No filter conditions are provided, so the operation is a straightforward DELETE without a WHERE clause."
+      },
+      "schema_tables": [],
+      "sql_generated": "DELETE FROM customers;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "DELETE FROM customers;",
+          "confidence": 0.99,
+          "score": 0.9989999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:23:16.462828",
+        "role": "user",
+        "sql_preview": "DELETE FROM customers;",
+        "decision": "REJECTED",
+        "violations": [
+          "Operation 'DELETE' is not permitted for role 'user'. Allowed operations: ['SELECT']"
+        ],
+        "warnings": []
+      },
+      "security_passed": false,
+      "optimization_result": {
+        "original_sql": null,
+        "optimized_sql": null,
+        "optimizations_applied": []
+      },
+      "execution_result": {
+        "success": false,
+        "error": null
+      },
+      "row_count": 0,
+      "explanation_output": null,
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Delete all customers.",
+        "Intent understood: data_modification question with 1 entities and 1 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: DELETE FROM customers;...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=1.00) from 3 candidates",
+        "Agent 5 (Security): REJECTED for role='user' \u2014 1 violation(s): [\"Operation 'DELETE' is not permitted for role 'user'. Allowed operations: ['SELECT']\"]"
+      ]
+    },
+    {
+      "id": "T12",
+      "query": "Update every customer's balance to 0.",
+      "intent_output": {
+        "entities": [
+          "customers",
+          "balance"
+        ],
+        "conditions": [],
+        "operations": [
+          "UPDATE"
+        ],
+        "question_type": "modification",
+        "confidence": 0.99,
+        "ambiguous_terms": [
+          "customers",
+          "balance"
+        ],
+        "reasoning": "The user wants to set the balance column to 0 for every row in the customers table. No filtering conditions are specified, so the operation is a straightforward UPDATE without a WHERE clause."
+      },
+      "schema_tables": [],
+      "sql_generated": "UPDATE customers SET balance = 0;",
+      "validation_result": {
+        "syntax_valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "is_valid": true,
+        "errors": [],
+        "warnings": [
+          "ADVISORY: Soft-pass schema validation \u2014 table_schemas is empty (DB might be missing or ChromaDB failed)"
+        ],
+        "evaluated_candidates": 3,
+        "best_candidate": {
+          "sql": "UPDATE customers SET balance = 0;",
+          "confidence": 0.99,
+          "score": 0.9989999999999999
+        }
+      },
+      "security_result": {
+        "timestamp": "2026-09-24T00:23:26.912652",
+        "role": "user",
+        "sql_preview": "UPDATE customers SET balance = 0;",
+        "decision": "REJECTED",
+        "violations": [
+          "Operation 'UPDATE' is not permitted for role 'user'. Allowed operations: ['SELECT']"
+        ],
+        "warnings": []
+      },
+      "security_passed": false,
+      "optimization_result": {
+        "original_sql": null,
+        "optimized_sql": null,
+        "optimizations_applied": []
+      },
+      "execution_result": {
+        "success": false,
+        "error": null
+      },
+      "row_count": 0,
+      "explanation_output": null,
+      "retry_count": 0,
+      "processing_log": [
+        "Initialized pipeline for question: Update every customer's balance to 0.",
+        "Intent understood: modification question with 2 entities and 1 operations",
+        "Retrieved 0 relevant tables: ",
+        "Generated 3 SQL candidates. Selected: UPDATE customers SET balance = 0;...",
+        "Agent 4 (Validation): PASSED \u2014 selected candidate (score=1.00) from 3 candidates",
+        "Agent 5 (Security): REJECTED for role='user' \u2014 1 violation(s): [\"Operation 'UPDATE' is not permitted for role 'user'. Allowed operations: ['SELECT']\"]"
+      ]
+    }
+  ],
+  "db_rows_after": {
+    "customers": 26,
+    "products": 10,
+    "orders": 54,
+    "order_items": 145
+  }
+}

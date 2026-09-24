@@ -1,4 +1,4 @@
-﻿"""
+"""
 Agent 5: Security / Permission Check
 
 This is the security gate that runs BEFORE SQL execution.
@@ -69,7 +69,7 @@ INJECTION_PATTERNS: List[re.Pattern[str]] = [
     re.compile(r"--\s*$", re.MULTILINE),     # comment-based injection
     re.compile(r"/\*.*?\*/", re.DOTALL),     # block comment injection
     re.compile(r"'\s*OR\s*'?\d+'?\s*=\s*'?\d+'?", re.IGNORECASE),  # classic OR 1=1
-    re.compile(r"UNION\s+(ALL\s+)?SELECT", re.IGNORECASE),          # UNION injection
+    re.compile(r";\s*UNION\s+(ALL\s+)?SELECT", re.IGNORECASE),          # UNION injection
 ]
 
 

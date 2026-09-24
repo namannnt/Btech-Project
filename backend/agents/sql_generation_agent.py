@@ -137,6 +137,35 @@ class SQLGenerationAgent:
         
         return "\n".join(fk_strings)
     
+    def _post_process_candidates(self, candidates: List[Dict[str, Any]], dialect: str) -> List[Dict[str, Any]]:
+        """Fix dialect-specific issues LLMs commonly make, e.g., using Postgres functions in SQLite."""
+        if dialect != "SQLite":
+            return candidates
+            
+        import re
+        for c in candidates:
+            if "sql" in c and c["sql"]:
+                # Replace DATE_TRUNC('month', col) -> strftime('%Y-%m', col)
+                c["sql"] = re.sub(
+                    r"DATE_TRUNC\s*\(\s*'month'\s*,\s*([a-zA-Z0-9_.]+)\s*\)", 
+                    r"strftime('%Y-%m', \1)", 
+                    c["sql"], 
+                    flags=re.IGNORECASE
+                )
+                c["sql"] = re.sub(
+                    r"DATE_TRUNC\s*\(\s*'year'\s*,\s*([a-zA-Z0-9_.]+)\s*\)", 
+                    r"strftime('%Y', \1)", 
+                    c["sql"], 
+                    flags=re.IGNORECASE
+                )
+                c["sql"] = re.sub(
+                    r"DATE_TRUNC\s*\(\s*'day'\s*,\s*([a-zA-Z0-9_.]+)\s*\)", 
+                    r"strftime('%Y-%m-%d', \1)", 
+                    c["sql"], 
+                    flags=re.IGNORECASE
+                )
+        return candidates
+    
     def invoke(self, state: AgentState) -> AgentState:
         """
         Generate SQL candidates from intent and schema.
@@ -184,6 +213,7 @@ class SQLGenerationAgent:
             
             # Update state with results
             candidates = result.get("candidates", [])
+            candidates = self._post_process_candidates(candidates, sql_dialect)
             state["sql_candidates"] = candidates
             state["generation_metadata"] = {
                 "num_candidates": len(candidates),
@@ -269,6 +299,9 @@ Return in the same JSON format as before."""
             
             # Update candidates
             candidates = result.get("candidates", [])
+            db_url = settings.database_url
+            sql_dialect = "SQLite" if "postgresql" not in db_url and "mysql" not in db_url else ("PostgreSQL" if "postgresql" in db_url else "MySQL")
+            candidates = self._post_process_candidates(candidates, sql_dialect)
             state["sql_candidates"] = candidates
             
             if candidates:

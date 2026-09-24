@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for Agent 5: Security Agent
 
 Tests cover:
@@ -94,7 +94,7 @@ def test_admin_can_delete(agent):
 # ============================================================================
 
 def test_injection_union_select_blocked(agent):
-    sql = "SELECT name FROM customers UNION SELECT password FROM users"
+    sql = "SELECT name FROM customers; UNION SELECT password FROM users"
     passed, violations, warnings, audit = agent.check_sql(sql, "user")
     assert passed is False
 

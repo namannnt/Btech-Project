@@ -27,7 +27,7 @@ Your task is to analyze the user's question and extract structured information t
 Analyze the following natural language question and extract:
 
 1. **entities**: List of database objects mentioned (tables, columns, values)
-2. **conditions**: Filter conditions with their operators (e.g., {"column": "age", "operator": ">", "value": "30"})
+2. **conditions**: Filter conditions with their operators (e.g., {{"column": "age", "operator": ">", "value": "30"}})
 3. **operations**: SQL operations needed (SELECT, COUNT, SUM, AVG, GROUP BY, ORDER BY, JOIN, etc.)
 4. **question_type**: Type of question (factual, analytical, comparative, aggregation, temporal, etc.)
 5. **confidence**: Your confidence in this interpretation (0.0 to 1.0)

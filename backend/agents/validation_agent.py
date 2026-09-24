@@ -1,4 +1,4 @@
-﻿"""
+"""
 Agent 4: SQL Validation
 
 Validates generated SQL candidates using four independent checks:
@@ -120,7 +120,8 @@ class SQLValidationAgent:
 
         # Cannot validate schema if no schema was retrieved
         if not table_schemas:
-            return True, []  # Soft pass — schema may not have been indexed yet
+            errors.append("ADVISORY: Soft-pass schema validation — table_schemas is empty (DB might be missing or ChromaDB failed)")
+            return True, errors  # Soft pass — schema may not have been indexed yet
 
         try:
             from sqlglot import exp
