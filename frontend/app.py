@@ -16,6 +16,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
+import os
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -26,6 +27,25 @@ st.set_page_config(
     page_icon="🤖",
     layout="wide"
 )
+
+
+@st.cache_resource
+def embedded_api_client():
+    """Keep the backend and its lifespan alive across Streamlit reruns."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+
+    client = TestClient(app, raise_server_exceptions=False)
+    client.__enter__()
+    return client
+
+
+embedded = os.environ.get("NL2SQL_EMBEDDED_API") == "1"
+api_client = embedded_api_client() if embedded else requests
+llm_ready = True
+if embedded:
+    from backend.core.config import settings
+    llm_ready = settings.use_openai or settings.use_groq
 
 # ---------------------------------------------------------------------------
 # Custom CSS
@@ -46,7 +66,11 @@ st.markdown("""
 
 with st.sidebar:
     st.title("⚙️ Settings")
-    api_url = st.text_input("Backend API URL", value="http://localhost:8000")
+    if embedded:
+        api_url = "http://testserver"
+        st.caption("Backend connected · hosted with this app")
+    else:
+        api_url = st.text_input("Backend API URL", value="http://localhost:8000")
     user_role = st.selectbox("User Role", ["user", "analyst", "admin", "guest"], index=0)
     include_explanation = st.checkbox("Include explanation", value=True)
     show_processing_log = st.checkbox("Show agent processing log", value=False)
@@ -63,7 +87,7 @@ with st.sidebar:
         with st.spinner("Connecting and analyzing schema..."):
             try:
                 files = {"file": (db_file.name, db_file, "application/octet-stream")}
-                upload_res = requests.post(f"{api_url}/api/v1/database/upload", files=files, timeout=60)
+                upload_res = api_client.post(f"{api_url}/api/v1/database/upload", files=files, timeout=60)
                 if upload_res.status_code == 200:
                     st.session_state.db_info = upload_res.json()
                     st.success("Successfully connected!")
@@ -128,7 +152,10 @@ for message in st.session_state.messages:
 # Chat input
 # ---------------------------------------------------------------------------
 
-if prompt := st.chat_input("Ask anything about your database..."):
+if not llm_ready:
+    st.info("App is ready. Add an OpenAI or Groq API key in Streamlit Secrets to enable AI queries.")
+
+if prompt := st.chat_input("Ask anything about your database...", disabled=not llm_ready):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -150,7 +177,7 @@ if prompt := st.chat_input("Ask anything about your database..."):
             if st.session_state.db_info:
                 payload["database_id"] = st.session_state.db_info.get("database_id")
 
-            response = requests.post(
+            response = api_client.post(
                 f"{api_url}/api/v1/query",
                 json=payload,
                 timeout=120

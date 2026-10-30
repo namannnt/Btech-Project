@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*
+.streamlit/secrets.toml
 
 # Python cache
 __pycache__/
@@ -22,3 +23,13 @@ env/
 # Database files
 *.db
 *.sqlite3
+
+# Large local datasets and generated binary artifacts
+amazon/**/*.parquet
+amazon/**/*.tsv
+amazon/**/*.zip
+amazon/**/*.pkl
+amazon/**/.DS_Store
+amazon/**/._*
+amazon/**/*.log
+amazon/**/*.done

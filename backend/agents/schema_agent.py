@@ -42,6 +42,10 @@ class SchemaRetrievalAgent:
         if self._initialized:
             return
         self._cached_schemas = {}
+
+        if not settings.enable_schema_rag:
+            self._initialized = True
+            return
         
         try:
             # Initialize embeddings
@@ -239,7 +243,15 @@ class SchemaRetrievalAgent:
             self._initialize()
         
         if not self.collection:
-            return {"relevant_tables": [], "table_schemas": {}, "foreign_keys": []}
+            # Full introspection is also used on Cloud without embedding models.
+            schema = self.introspect_schema()
+            tables = schema.get("tables", {})
+            return {
+                "relevant_tables": list(tables),
+                "table_schemas": tables,
+                "foreign_keys": schema.get("foreign_keys", []),
+                "relevance_scores": {},
+            }
         
         # Enhance query with intent information
         enhanced_query = query

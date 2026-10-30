@@ -70,6 +70,18 @@ def test_introspect_no_engine():
     assert schema == {}
 
 
+def test_cloud_schema_without_embeddings(agent_with_db, monkeypatch):
+    """Cloud still supplies table definitions and joins without an embedding model."""
+    from backend.core.config import settings
+
+    monkeypatch.setattr(settings, "enable_schema_rag", False)
+    result = agent_with_db.retrieve_relevant_schema("Show customer orders")
+    assert set(result["relevant_tables"]) == {"customers", "orders"}
+    assert result["table_schemas"]["customers"]["columns"]
+    assert result["foreign_keys"][0]["referenced_table"] == "customers"
+    assert result["relevance_scores"] == {}
+
+
 def test_retrieve_without_chromadb_returns_empty(monkeypatch):
     """When ChromaDB is not initialized, retrieve returns empty dicts."""
     agent = SchemaRetrievalAgent()

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     chroma_persist_dir: str = "./data/chroma_db"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    enable_schema_rag: bool = True
 
     # -------------------------------------------------------------------------
     # LLM Model Configuration

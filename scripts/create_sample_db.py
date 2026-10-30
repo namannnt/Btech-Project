@@ -3,12 +3,13 @@ import os
 from datetime import datetime, timedelta
 import random
 
-def create_db():
-    db_path = 'backend/data/sample.db'
+def create_db(db_path='backend/data/sample.db', *, overwrite=True, remove_alternate=True):
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
     # Remove existing db if any to ensure clean slate
     if os.path.exists(db_path):
+        if not overwrite:
+            return
         os.remove(db_path)
         
     conn = sqlite3.connect(db_path)
@@ -128,7 +129,7 @@ def create_db():
     # It says "Remove/avoid ambiguity with: data/sample.db. If another database path exists, document why or consolidate it."
     # I'll delete data/sample.db if it exists.
     alt_db_path = 'data/sample.db'
-    if os.path.exists(alt_db_path):
+    if remove_alternate and os.path.exists(alt_db_path):
         os.remove(alt_db_path)
     
     print(f"Database successfully created at {db_path}")
